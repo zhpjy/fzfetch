@@ -12,6 +12,27 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+function formatFileSize(sizeBytes?: number | null) {
+  if (sizeBytes == null || Number.isNaN(sizeBytes)) {
+    return '--';
+  }
+
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = sizeBytes / 1024;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
 export default function App() {
   const {
     query,
@@ -46,10 +67,10 @@ export default function App() {
   const showSearching = !showWaiting && isSearching && results.length === 0;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-300 font-mono flex flex-col items-center select-none overflow-hidden">
+    <div className="h-screen bg-zinc-950 text-zinc-300 font-mono flex flex-col items-center select-none overflow-hidden">
       
       {/* Header / Status Bar */}
-      <div className="w-full max-w-5xl px-8 pt-10 flex justify-between items-end mb-6">
+      <div className="w-full max-w-5xl px-3 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pt-10 flex justify-between items-end mb-4 sm:mb-6">
         <div className="flex items-center gap-4">
           <Terminal className="text-emerald-500" size={28} />
           <h1 className="text-2xl font-bold tracking-tighter text-zinc-100">FZFETCH</h1>
@@ -62,9 +83,10 @@ export default function App() {
       </div>
 
       {/* Main Search Area */}
-      <div className="w-full max-w-5xl px-8 relative group mb-2">
-        <div className="absolute left-14 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-emerald-500 transition-colors pointer-events-none">
-          <Search size={22} />
+      <div className="w-full max-w-5xl px-3 sm:px-6 lg:px-8 relative group mb-2">
+        <div className="absolute left-8 sm:left-10 lg:left-14 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-emerald-500 transition-colors pointer-events-none">
+          <Search size={18} className="sm:hidden" />
+          <Search size={22} className="hidden sm:block" />
         </div>
         <input
           ref={inputRef}
@@ -73,13 +95,13 @@ export default function App() {
           placeholder="输入关键词进行实时模糊搜索..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="w-full bg-zinc-900 border border-zinc-800 outline-none rounded-xl py-5 pl-16 pr-8 text-xl shadow-2xl focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 text-zinc-100 transition-all placeholder:text-zinc-700"
+          className="w-full bg-zinc-900 border border-zinc-800 outline-none rounded-xl py-4 sm:py-5 pl-11 sm:pl-14 lg:pl-16 pr-4 sm:pr-6 lg:pr-8 text-base sm:text-lg lg:text-xl shadow-2xl focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 text-zinc-100 transition-all placeholder:text-zinc-700"
         />
       </div>
 
       {/* Results Section */}
-      <div className="w-full max-w-5xl flex-1 px-8 pb-6 overflow-hidden flex flex-col">
-        <div className="border border-zinc-800 rounded-xl flex-1 overflow-hidden flex flex-col bg-zinc-900/50 shadow-inner relative mt-4">
+      <div className="w-full max-w-5xl flex-1 min-h-0 px-3 sm:px-6 lg:px-8 pb-4 sm:pb-6 overflow-hidden flex flex-col">
+        <div className="border border-zinc-800 rounded-xl flex-1 min-h-0 overflow-hidden flex flex-col bg-zinc-900/50 shadow-inner relative mt-4">
           
           {/* Progress bar for index refresh */}
           {workStatus === 'refreshing' && (
@@ -88,7 +110,10 @@ export default function App() {
             </div>
           )}
           
-          <div className="overflow-y-auto custom-scrollbar flex-1">
+          <div
+            data-testid="results-scroll-area"
+            className="overflow-y-scroll custom-scrollbar flex-1 min-h-0"
+          >
             {results.length > 0 ? (
               <div className="divide-y divide-zinc-800/50">
                 {results.map((item, index) => (
@@ -97,39 +122,56 @@ export default function App() {
                     id={`item-${index}`}
                     onClick={() => handleDownload(item)}
                     className={cn(
-                      "px-8 py-4 cursor-pointer flex items-center justify-between group transition-all border-l-4",
+                      "px-3 py-2 sm:px-5 sm:py-2.5 lg:px-7 cursor-pointer flex items-center justify-between gap-3 group transition-all border-l-2",
                       selectedIndex === index 
                         ? 'border-l-emerald-500 bg-emerald-500/5'
                         : 'border-l-transparent hover:bg-zinc-800/30'
                     )}
                   >
-                    <div className="flex items-center gap-5 min-w-0">
+                    <div className="flex flex-1 items-center gap-2.5 sm:gap-3.5 min-w-0">
                       <div className="flex-shrink-0">
                         {selectedIndex === index ? (
-                           <span className="text-emerald-500 font-bold tracking-widest text-sm">&gt;</span>
+                          <>
+                            <span className="text-emerald-500 font-bold tracking-widest text-xs sm:hidden">&gt;</span>
+                            <span className="hidden sm:block text-emerald-500 font-bold tracking-widest text-xs">&gt;</span>
+                          </>
                         ) : (
-                          <FileText size={18} className="text-zinc-700 group-hover:text-zinc-500 transition-colors" />
+                          <>
+                            <FileText size={14} className="text-zinc-700 group-hover:text-zinc-500 transition-colors sm:hidden" />
+                            <FileText size={16} className="hidden sm:block text-zinc-700 group-hover:text-zinc-500 transition-colors" />
+                          </>
                         )}
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className={cn(
-                          "truncate text-base",
-                          selectedIndex === index ? 'text-zinc-50 font-bold' : 'text-zinc-300'
+                          "truncate text-[13px] leading-4 sm:text-sm sm:leading-4",
+                          selectedIndex === index ? 'text-zinc-50 font-semibold' : 'text-zinc-300'
                         )}>
                           <FuzzyHighlight text={item.path.split('/').pop() || ''} query={query} />
                         </div>
-                        <div className="truncate text-xs text-zinc-500 italic mt-0.5 font-sans opacity-60">
+                        <div className="truncate text-[9px] leading-3 sm:text-[10px] text-zinc-500 italic mt-0.5 font-sans opacity-70">
                           <FuzzyHighlight text={item.path} query={query} />
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-6 flex-shrink-0">
-                      <div className="w-10 flex justify-center">
+                    <div className="flex flex-col items-end justify-center gap-1 sm:flex-row sm:items-center sm:gap-3.5 flex-shrink-0">
+                      <div className="min-w-0 text-right text-[10px] sm:min-w-14 sm:text-[11px] font-semibold tabular-nums text-zinc-500">
+                        {formatFileSize(item.size_bytes)}
+                      </div>
+                      <div className="w-5 sm:w-8 flex justify-center">
                         {downloadingPath === item.path ? (
-                          <Loader2 size={18} className="text-emerald-500 animate-spin" />
+                          <Loader2 size={14} className="text-emerald-500 animate-spin sm:hidden" />
                         ) : (
-                          <Download size={18} className={cn(
-                            "transition-all duration-200",
+                          <Download size={14} className={cn(
+                            "sm:hidden transition-all duration-200",
+                            selectedIndex === index ? 'opacity-100 text-emerald-500' : 'opacity-40 group-hover:opacity-60 sm:opacity-0 sm:group-hover:opacity-30'
+                          )} />
+                        )}
+                        {downloadingPath === item.path ? (
+                          <Loader2 size={16} className="hidden sm:block text-emerald-500 animate-spin" />
+                        ) : (
+                          <Download size={16} className={cn(
+                            "hidden sm:block transition-all duration-200",
                             selectedIndex === index ? 'opacity-100 text-emerald-500' : 'opacity-0 group-hover:opacity-30'
                           )} />
                         )}
@@ -163,8 +205,11 @@ export default function App() {
       </div>
 
       {/* Footer / Key Hints */}
-      <div className="w-full max-w-5xl px-10 py-4 flex items-center justify-between text-[10px] font-bold opacity-30 uppercase tracking-[0.2em]">
-        <div className="flex gap-8">
+      <div
+        data-testid="footer-hints"
+        className="w-full max-w-5xl flex-shrink-0 px-4 sm:px-8 lg:px-10 py-3 sm:py-4 flex items-center justify-between text-[9px] sm:text-[10px] font-bold opacity-30 uppercase tracking-[0.15em] sm:tracking-[0.2em]"
+      >
+        <div className="flex gap-4 sm:gap-8">
           <span className="flex items-center gap-2">
             <kbd className="px-1.5 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-100">↑↓</kbd>
             Select Item

@@ -143,4 +143,34 @@ describe('App', () => {
     expect('status' in (statusIndicatorState.lastProps ?? {})).toBe(false);
     expect('onRefresh' in (statusIndicatorState.lastProps ?? {})).toBe(false);
   });
+
+  it('renders a dedicated scroll area and keeps footer hints outside it', () => {
+    searchSocketState.connectionStatus = 'ready';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = 'abc';
+    searchSocketState.initialResults = [{ path: '/tmp/demo.txt', score: 1, size_bytes: 1536 }];
+
+    render(<App />);
+
+    const scrollArea = screen.getByTestId('results-scroll-area');
+    const footerHints = screen.getByTestId('footer-hints');
+
+    expect(scrollArea.className).toContain('overflow-y-scroll');
+    expect(scrollArea.className).toContain('min-h-0');
+    expect(footerHints.className).toContain('flex-shrink-0');
+    expect(scrollArea).not.toContainElement(footerHints);
+  });
+
+  it('shows file size to the left of the download icon', () => {
+    searchSocketState.connectionStatus = 'ready';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = 'demo';
+    searchSocketState.initialResults = [{ path: '/tmp/demo.txt', score: 1, size_bytes: 1536 }];
+
+    render(<App />);
+
+    expect(screen.getByText('1.5 KB')).toBeInTheDocument();
+  });
 });

@@ -1,6 +1,7 @@
 export interface SearchHit {
   path: string;
   score: number;
+  size_bytes?: number | null;
 }
 
 export interface SearchRequest {

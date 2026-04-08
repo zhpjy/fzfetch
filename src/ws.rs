@@ -24,6 +24,7 @@ pub struct SearchRequest {
 pub struct SearchResponseItem {
     pub path: String,
     pub score: u32,
+    pub size_bytes: Option<u64>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -37,6 +38,7 @@ impl From<SearchHit> for SearchResponseItem {
         Self {
             path: hit.path,
             score: hit.score,
+            size_bytes: hit.size_bytes,
         }
     }
 }

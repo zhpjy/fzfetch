@@ -8,6 +8,7 @@ use nucleo::{Config, Matcher, Nucleo, Utf32String};
 pub struct SearchHit {
     pub path: String,
     pub score: u32,
+    pub size_bytes: Option<u64>,
 }
 
 pub struct SearchEngine {
@@ -58,6 +59,7 @@ impl SearchEngine {
                     .pattern()
                     .score(item.matcher_columns, &mut matcher)
                     .unwrap_or_default(),
+                size_bytes: std::fs::metadata(&item.data).ok().map(|meta| meta.len()),
             })
             .collect()
     }
@@ -80,5 +82,25 @@ impl SearchEngine {
 impl Default for SearchEngine {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SearchEngine;
+
+    #[test]
+    fn search_includes_file_size_for_existing_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let file_path = temp.path().join("demo.txt");
+        std::fs::write(&file_path, b"hello").unwrap();
+
+        let mut engine = SearchEngine::new();
+        engine.seed([file_path.to_string_lossy().to_string()]);
+
+        let hits = engine.search("demo", 10);
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].size_bytes, Some(5));
     }
 }
