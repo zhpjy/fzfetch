@@ -1,10 +1,16 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 use fzfetch::cache::{
     CacheLayoutStatus, ensure_cache_layout, load_cache_paths, write_cache_snapshot,
 };
 use fzfetch::scanner::{diff_paths, scan_root_files};
+
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 #[test]
 fn ensure_cache_layout_creates_data_dir_and_cache_file() {
@@ -28,6 +34,43 @@ fn config_uses_expected_defaults() {
     assert_eq!(config.data_dir, PathBuf::from("data"));
     assert_eq!(config.cache_file, PathBuf::from("data/cache.txt"));
     assert_eq!(config.top_k, 100);
+}
+
+#[test]
+fn from_env_uses_local_default_directories() {
+    let _guard = env_lock().lock().unwrap();
+    unsafe {
+        std::env::remove_var("FZFETCH_ROOT");
+        std::env::remove_var("FZFETCH_DATA_DIR");
+    }
+
+    let config = fzfetch::config::AppConfig::from_env().unwrap();
+
+    assert_eq!(config.root_dir, PathBuf::from("files"));
+    assert_eq!(config.data_dir, PathBuf::from("data"));
+    assert_eq!(config.cache_file, PathBuf::from("data/cache.txt"));
+}
+
+#[test]
+fn from_env_honors_root_and_data_dir_overrides() {
+    let _guard = env_lock().lock().unwrap();
+    let root = PathBuf::from("/tmp/fzfetch-root");
+    let data_dir = PathBuf::from("/tmp/fzfetch-data");
+    unsafe {
+        std::env::set_var("FZFETCH_ROOT", &root);
+        std::env::set_var("FZFETCH_DATA_DIR", &data_dir);
+    }
+
+    let config = fzfetch::config::AppConfig::from_env().unwrap();
+
+    assert_eq!(config.root_dir, root);
+    assert_eq!(config.data_dir, data_dir);
+    assert_eq!(config.cache_file, PathBuf::from("/tmp/fzfetch-data/cache.txt"));
+
+    unsafe {
+        std::env::remove_var("FZFETCH_ROOT");
+        std::env::remove_var("FZFETCH_DATA_DIR");
+    }
 }
 
 #[test]
@@ -55,6 +98,25 @@ fn config_canonicalize_root_dir_updates_field() {
     config.canonicalize_root_dir().unwrap();
 
     assert_eq!(config.canonical_root_dir, expected);
+}
+
+#[test]
+fn ensure_runtime_dirs_creates_missing_root_and_data_directories() {
+    let temp = tempfile::tempdir().unwrap();
+    let root_dir = temp.path().join("files");
+    let data_dir = temp.path().join("data");
+    let mut config = fzfetch::config::AppConfig::default_for(root_dir.clone());
+    config.data_dir = data_dir.clone();
+    config.cache_file = data_dir.join("cache.txt");
+
+    assert!(!root_dir.exists());
+    assert!(!data_dir.exists());
+
+    config.ensure_runtime_dirs().unwrap();
+
+    assert!(root_dir.is_dir());
+    assert!(data_dir.is_dir());
+    assert_eq!(config.canonical_root_dir, root_dir.canonicalize().unwrap());
 }
 
 #[test]

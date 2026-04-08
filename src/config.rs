@@ -32,8 +32,11 @@ impl AppConfig {
     }
 
     pub fn from_env() -> anyhow::Result<Self> {
-        let root_dir = std::env::var("FZFETCH_ROOT").unwrap_or_else(|_| ".".to_string());
+        let root_dir = std::env::var("FZFETCH_ROOT").unwrap_or_else(|_| "files".to_string());
+        let data_dir = std::env::var("FZFETCH_DATA_DIR").unwrap_or_else(|_| "data".to_string());
         let mut config = Self::default_for(root_dir.into());
+        config.data_dir = PathBuf::from(data_dir);
+        config.cache_file = config.data_dir.join("cache.txt");
         config.refresh_ttl =
             Duration::from_secs(parse_u64_env("FZFETCH_REFRESH_TTL_SECS", 24 * 60 * 60)?);
         config.idle_ttl = Duration::from_secs(parse_u64_env("FZFETCH_IDLE_TTL_SECS", 30 * 60)?);
@@ -41,6 +44,13 @@ impl AppConfig {
             Duration::from_secs(parse_u64_env("FZFETCH_CLEANUP_INTERVAL_SECS", 60)?);
         config.top_k = parse_usize_env("FZFETCH_TOP_K", 100)?;
         Ok(config)
+    }
+
+    pub fn ensure_runtime_dirs(&mut self) -> anyhow::Result<()> {
+        std::fs::create_dir_all(&self.root_dir)?;
+        std::fs::create_dir_all(&self.data_dir)?;
+        self.canonicalize_root_dir()?;
+        Ok(())
     }
 
     pub fn canonicalize_root_dir(&mut self) -> anyhow::Result<()> {

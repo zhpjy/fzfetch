@@ -5,6 +5,7 @@ pub mod error;
 pub mod scanner;
 pub mod search;
 pub mod state;
+pub mod web;
 pub mod ws;
 
 #[cfg(test)]

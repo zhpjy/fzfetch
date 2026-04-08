@@ -190,7 +190,7 @@ export function StatusIndicator({
           ? '连接异常'
           : workStatus === 'refreshing'
             ? '索引后台更新中'
-            : '系统就绪';
+            : '索引就绪';
 
   return (
     <div className="flex items-center gap-4 text-[10px]">

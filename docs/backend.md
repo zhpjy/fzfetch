@@ -45,7 +45,10 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 - `FZFETCH_ROOT`
   - 需要建立索引的根目录。
-  - 默认值：当前工作目录 `.`。
+  - 默认值：当前工作目录下的 `files`。
+- `FZFETCH_DATA_DIR`
+  - 应用状态目录，当前用于放置缓存文件。
+  - 默认值：当前工作目录下的 `data`。
 - `FZFETCH_REFRESH_TTL_SECS`
   - 缓存过期秒数，过期后用户下一次搜索会触发后台刷新。
   - 默认值：`86400`。
@@ -61,7 +64,8 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 说明：
 
-- `data/cache.txt` 目前固定放在项目根下的 `data/` 目录，用于 Docker volume 持久化。
+- `cache.txt` 路径固定为 `FZFETCH_DATA_DIR/cache.txt`，默认即 `data/cache.txt`。
+- 启动时若 `FZFETCH_ROOT` 或 `FZFETCH_DATA_DIR` 不存在，进程会自动创建目录。
 - 若服务启动时发现 `cache.txt` 是新创建的空文件，则首次用户搜索会立即触发一次后台刷新，不会等到 24 小时后。
 
 ## 4. 索引生命周期

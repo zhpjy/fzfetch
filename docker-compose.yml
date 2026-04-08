@@ -1,0 +1,16 @@
+services:
+  fzfetch:
+    build:
+      context: .
+    ports:
+      - "3000:3000"
+    environment:
+      FZFETCH_ROOT: /files
+      FZFETCH_DATA_DIR: /data
+    volumes:
+      - ./files:/files
+      - fzfetch-data:/data
+    restart: unless-stopped
+
+volumes:
+  fzfetch-data:

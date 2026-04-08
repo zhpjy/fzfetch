@@ -1,0 +1,8 @@
+.git
+.gitignore
+target
+frontend/node_modules
+frontend/dist
+files
+data
+docs

@@ -57,7 +57,7 @@ export const StatusIndicator: React.FC<Props> = (props) => {
       case 'idle':
       case 'searching':
       default:
-        return { label: '系统就绪', color: 'bg-emerald-500 shadow-[0_0_8px_#10b981]' };
+        return { label: '索引就绪', color: 'bg-emerald-500 shadow-[0_0_8px_#10b981]' };
     }
   };
 

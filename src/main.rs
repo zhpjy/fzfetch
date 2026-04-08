@@ -1,15 +1,13 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::Router;
-use axum::routing::get;
 use tracing_subscriber::EnvFilter;
 
-use fzfetch::api::download_handler;
 use fzfetch::cache::{CacheLayoutStatus, ensure_cache_layout};
 use fzfetch::config::AppConfig;
 use fzfetch::state::AppState;
-use fzfetch::ws::ws_handler;
+use fzfetch::web::build_app;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -18,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let mut config = AppConfig::from_env()?;
-    config.canonicalize_root_dir()?;
+    config.ensure_runtime_dirs()?;
     tracing::info!(
         root_dir = %config.canonical_root_dir.display(),
         cache_file = %config.cache_file.display(),
@@ -44,11 +42,8 @@ async fn main() -> anyhow::Result<()> {
         cleanup_manager.run_cleanup_loop().await;
     });
 
-    let app = Router::new()
-        .route("/ws", get(ws_handler))
-        .route("/download", get(download_handler))
-        .with_state(state);
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let app = build_app(state, PathBuf::from("frontend/dist"));
+    let addr = SocketAddr::from((IpAddr::V4(Ipv4Addr::UNSPECIFIED), 3000));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "fzfetch backend listening");
     axum::serve(listener, app).await?;
