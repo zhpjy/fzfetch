@@ -18,7 +18,8 @@ export function useDownload(onGhostFound: (path: string) => void) {
       const response = await fetch(`/download?path=${encodeURIComponent(item.path)}`);
 
       if (response.status === 410) {
-        showToast('410 Gone: 文件已被移动或删除', 'error');
+        // 410 means the file is already gone; treat it as a soft hint and trigger cleanup.
+        showToast('文件已被移动或删除，已从结果中移除', 'success');
         onGhostFound(item.path);
         return;
       }
