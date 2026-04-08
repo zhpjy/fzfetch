@@ -26,7 +26,7 @@ export const StatusIndicator: React.FC<Props> = (props) => {
     'connectionStatus' in props
       ? props.connectionStatus
       : props.status === 'disconnected'
-        ? 'error'
+        ? 'disconnected'
         : 'ready';
 
   const workStatus: WorkStatus =
@@ -34,20 +34,30 @@ export const StatusIndicator: React.FC<Props> = (props) => {
       ? props.workStatus
       : props.status === 'refreshing'
         ? 'refreshing'
-        : 'ready';
+        : props.status === 'ready' && props.isSearching
+          ? 'searching'
+          : 'idle';
 
   const getStatusConfig = () => {
-    if (connectionStatus !== 'ready') {
-      return { label: '未连接服务器', color: 'bg-red-500 shadow-[0_0_8px_#ef4444]' };
+    switch (connectionStatus) {
+      case 'connecting':
+        return { label: '正在连接', color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
+      case 'disconnected':
+        return { label: '未连接服务器', color: 'bg-red-500 shadow-[0_0_8px_#ef4444]' };
+      case 'error':
+        return { label: '连接异常', color: 'bg-red-500 shadow-[0_0_8px_#ef4444]' };
+      case 'ready':
+      default:
+        break;
     }
 
     switch (workStatus) {
       case 'refreshing':
         return { label: '索引后台更新中', color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
-      case 'ready':
-      default: {
+      case 'idle':
+      case 'searching':
+      default:
         return { label: '系统就绪', color: 'bg-emerald-500 shadow-[0_0_8px_#10b981]' };
-      }
     }
   };
 
@@ -55,14 +65,15 @@ export const StatusIndicator: React.FC<Props> = (props) => {
     switch (workStatus) {
       case 'refreshing':
         return 'SCANNING';
-      case 'ready':
-      default: {
+      case 'searching':
+        return 'SEARCHING';
+      case 'idle':
+      default:
         return 'IDLE';
-      }
     }
   };
 
-  const isBusy = workStatus !== 'ready';
+  const isBusy = workStatus !== 'idle' || connectionStatus === 'connecting';
 
   const statusConfig = getStatusConfig();
 
