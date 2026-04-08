@@ -320,4 +320,49 @@ describe('useSearchSocket', () => {
     expect(ws.send).toHaveBeenCalledTimes(1);
     expect(JSON.parse(ws.send.mock.calls[0]![0]).query).toBe('dup');
   });
+
+  it('clears stale pending after a successful send; reconnect uses only current query', async () => {
+    const h = renderHookHarness();
+
+    await h.flush();
+    expect(MockWebSocket.instances.length).toBe(1);
+    const ws1 = MockWebSocket.instances[0]!;
+
+    // 1) Create an "old" pending while disconnected.
+    act(() => h.getLatest().setQuery('old'));
+    await h.flush();
+    act(() => vi.advanceTimersByTime(1000)); // let debounce elapse and buffer pending
+    await h.flush();
+    expect(ws1.send).toHaveBeenCalledTimes(0);
+
+    // 2) User changes to a new query, but socket opens during debounce window.
+    act(() => h.getLatest().setQuery('new'));
+    await h.flush();
+    act(() => ws1.open());
+    await h.flush();
+
+    // Should not send immediately because debounce for the current query is pending.
+    expect(ws1.send).toHaveBeenCalledTimes(0);
+
+    // Debounce fires: successfully sends "new" (this must invalidate any older pending).
+    act(() => vi.advanceTimersByTime(1000));
+    await h.flush();
+    expect(ws1.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(ws1.send.mock.calls[0]![0]).query).toBe('new');
+
+    // 3) Disconnect and reconnect.
+    act(() => ws1.close());
+    await h.flush();
+    act(() => vi.advanceTimersByTime(5000));
+    await h.flush();
+    expect(MockWebSocket.instances.length).toBeGreaterThan(1);
+
+    const ws2 = MockWebSocket.instances[1]!;
+    act(() => ws2.open());
+    await h.flush();
+
+    // Must not replay "old" pending; only current query "new" is allowed.
+    expect(ws2.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(ws2.send.mock.calls[0]![0]).query).toBe('new');
+  });
 });

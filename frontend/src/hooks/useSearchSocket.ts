@@ -35,6 +35,9 @@ export function useSearchSocket() {
       return;
     }
 
+    // Once we successfully send a query, any older offline buffer must not survive into future reconnects.
+    pendingQueryRef.current = null;
+
     const req_id = ++latestReqIdRef.current;
     const request: SearchRequest = { req_id, query: q };
     ws.send(JSON.stringify(request));
