@@ -78,6 +78,44 @@ describe('useKeyboardNavigation', () => {
     expect(h.onDownload).not.toHaveBeenCalled();
   });
 
+  it('cycles selection with ArrowUp / ArrowDown', async () => {
+    const results: SearchHit[] = [
+      { path: '/tmp/0.txt', score: 0 },
+      { path: '/tmp/1.txt', score: 1 },
+      { path: '/tmp/2.txt', score: 2 },
+    ];
+    const h = renderHookHarness(results);
+    await h.flush();
+    expect(h.getLatest().selectedIndex).toBe(0);
+
+    dispatchKey('ArrowUp');
+    await h.flush();
+    expect(h.getLatest().selectedIndex).toBe(2);
+
+    dispatchKey('ArrowDown');
+    await h.flush();
+    expect(h.getLatest().selectedIndex).toBe(0);
+  });
+
+  it('triggers onDownload for the currently selected item on Enter', async () => {
+    const results: SearchHit[] = [
+      { path: '/tmp/0.txt', score: 0 },
+      { path: '/tmp/1.txt', score: 1 },
+    ];
+    const h = renderHookHarness(results);
+    await h.flush();
+
+    dispatchKey('ArrowDown');
+    await h.flush();
+    expect(h.getLatest().selectedIndex).toBe(1);
+
+    dispatchKey('Enter');
+    await h.flush();
+
+    expect(h.onDownload).toHaveBeenCalledTimes(1);
+    expect(h.onDownload).toHaveBeenCalledWith(results[1]);
+  });
+
   it('clamps selectedIndex when results shrink so it stays within bounds', async () => {
     const results5: SearchHit[] = Array.from({ length: 5 }, (_, i) => ({
       path: `/tmp/${i}.txt`,
@@ -99,5 +137,16 @@ describe('useKeyboardNavigation', () => {
     await h.flush();
     expect(h.getLatest().selectedIndex).toBe(1);
   });
-});
 
+  it('removes global keydown listener on unmount', async () => {
+    const h = renderHookHarness([{ path: '/tmp/0.txt', score: 0 }]);
+    await h.flush();
+
+    h.unmount();
+    dispatchKey('Escape');
+    dispatchKey('Enter');
+
+    expect(h.onEscape).not.toHaveBeenCalled();
+    expect(h.onDownload).not.toHaveBeenCalled();
+  });
+});

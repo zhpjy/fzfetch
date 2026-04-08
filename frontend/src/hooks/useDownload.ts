@@ -1,18 +1,44 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SearchHit } from '../types';
 
 export function useDownload(onGhostFound: (path: string) => void) {
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
+  const mountedRef = useRef(false);
+  const inFlightRef = useRef(false);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (toastTimeoutRef.current !== null) {
+        window.clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    if (!mountedRef.current) return;
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    if (toastTimeoutRef.current !== null) {
+      window.clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    toastTimeoutRef.current = window.setTimeout(() => {
+      if (!mountedRef.current) return;
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 3000);
   };
 
   const handleDownload = async (item: SearchHit) => {
-    if (downloadingPath) return;
-    setDownloadingPath(item.path);
+    // Synchronous guard against double-trigger/reentrancy (keyboard repeat / double click).
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    if (mountedRef.current) setDownloadingPath(item.path);
 
     try {
       const response = await fetch(`/download?path=${encodeURIComponent(item.path)}`);
@@ -42,9 +68,10 @@ export function useDownload(onGhostFound: (path: string) => void) {
       showToast(`已开始下载: ${item.path.split('/').pop()}`, 'success');
     } catch (err) {
       console.error(err);
-      showToast('下载失败', 'error');
+      if (mountedRef.current) showToast('下载失败', 'error');
     } finally {
-      setDownloadingPath(null);
+      inFlightRef.current = false;
+      if (mountedRef.current) setDownloadingPath(null);
     }
   };
 

@@ -39,6 +39,7 @@ describe('useDownload', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -66,5 +67,171 @@ describe('useDownload', () => {
     expect(h.getLatest().toast?.type).toBe('success');
     expect(h.getLatest().toast?.msg).not.toBe('下载失败');
   });
-});
 
+  it('keeps existing behavior on success (starts download + success toast)', async () => {
+    const onGhostFound = vi.fn<(path: string) => void>();
+
+    const blob = new Blob(['hello'], { type: 'text/plain' });
+    const fetchMock = vi.fn(async () => {
+      return {
+        ok: true,
+        status: 200,
+        blob: async () => blob,
+      } as unknown as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const createObjectURL = vi.fn(() => 'blob:mock');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL,
+    } as unknown as typeof URL);
+
+    const click = vi.fn();
+    const appendChild = vi.spyOn(document.body, 'appendChild');
+    const removeChild = vi.spyOn(document.body, 'removeChild');
+
+    const origCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      const el = origCreateElement(tagName);
+      if (tagName === 'a') {
+        Object.defineProperty(el, 'click', { value: click });
+      }
+      return el;
+    });
+
+    const h = renderHookHarness(onGhostFound);
+    await h.flush();
+
+    const item: SearchHit = { path: '/tmp/ok.txt', score: 1 };
+    await act(async () => {
+      await h.getLatest().handleDownload(item);
+    });
+    await h.flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onGhostFound).not.toHaveBeenCalled();
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(appendChild).toHaveBeenCalled();
+    expect(removeChild).toHaveBeenCalled();
+
+    expect(h.getLatest().toast?.type).toBe('success');
+  });
+
+  it('shows an error toast for non-410 failures', async () => {
+    const onGhostFound = vi.fn<(path: string) => void>();
+    const fetchMock = vi.fn(async () => {
+      return { ok: false, status: 500 } as unknown as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const h = renderHookHarness(onGhostFound);
+    await h.flush();
+
+    const item: SearchHit = { path: '/tmp/fail.txt', score: 1 };
+    await act(async () => {
+      await h.getLatest().handleDownload(item);
+    });
+    await h.flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onGhostFound).not.toHaveBeenCalled();
+    expect(h.getLatest().toast?.type).toBe('error');
+    expect(h.getLatest().toast?.msg).toBe('下载失败');
+    consoleError.mockRestore();
+  });
+
+  it('only issues one request for rapid repeated triggers', async () => {
+    const onGhostFound = vi.fn<(path: string) => void>();
+
+    let resolveFetch: ((v: Response) => void) | null = null;
+    const fetchStarted = vi.fn();
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          fetchStarted();
+          resolveFetch = resolve;
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const createObjectURL = vi.fn(() => 'blob:mock');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL,
+    } as unknown as typeof URL);
+
+    const click = vi.fn();
+    const origCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      const el = origCreateElement(tagName);
+      if (tagName === 'a') {
+        Object.defineProperty(el, 'click', { value: click });
+      }
+      return el;
+    });
+
+    const h = renderHookHarness(onGhostFound);
+    await h.flush();
+
+    const item: SearchHit = { path: '/tmp/slow.txt', score: 1 };
+    const p1 = h.getLatest().handleDownload(item);
+    const p2 = h.getLatest().handleDownload(item);
+
+    expect(fetchStarted).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveFetch?.(
+      ({
+        ok: true,
+        status: 200,
+        blob: async () => new Blob(['x']),
+      } as unknown as Response)
+    );
+
+    await act(async () => {
+      await Promise.all([p1, p2]);
+    });
+    await h.flush();
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(click).toHaveBeenCalledTimes(1);
+    consoleError.mockRestore();
+  });
+
+  it('does not update state or fire delayed toast cleanup after unmount', async () => {
+    const onGhostFound = vi.fn<(path: string) => void>();
+    const fetchMock = vi.fn(async () => {
+      return { ok: false, status: 410 } as unknown as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const h = renderHookHarness(onGhostFound);
+    await h.flush();
+
+    const item: SearchHit = { path: '/tmp/ghost-late.txt', score: 1 };
+    // Trigger a toast + timeout, then immediately unmount before timers run.
+    const p = h.getLatest().handleDownload(item);
+    h.unmount();
+
+    await act(async () => {
+      await p;
+    });
+
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    // React warns via console.error on setState after unmount.
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+});
