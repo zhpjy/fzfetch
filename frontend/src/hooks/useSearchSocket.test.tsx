@@ -56,7 +56,7 @@ function renderHookHarness() {
     return null;
   }
 
-  render(<Harness onUpdate={(s) => (latest = s)} />);
+  const rendered = render(<Harness onUpdate={(s) => (latest = s)} />);
 
   return {
     getLatest: () => {
@@ -68,6 +68,7 @@ function renderHookHarness() {
         await Promise.resolve();
       });
     },
+    unmount: () => rendered.unmount(),
   };
 }
 
@@ -206,5 +207,70 @@ describe('useSearchSocket', () => {
     act(() => ws2.open());
     await h.flush();
     expect(h.getLatest().connectionStatus).toBe('ready');
+  });
+
+  it('buffers query while socket is not open and sends on open', async () => {
+    const h = renderHookHarness();
+
+    await h.flush();
+    expect(MockWebSocket.instances.length).toBe(1);
+    const ws = MockWebSocket.instances[0]!;
+
+    act(() => h.getLatest().setQuery('buffered'));
+    await h.flush();
+    act(() => vi.advanceTimersByTime(1000));
+    await h.flush();
+
+    expect(ws.send).toHaveBeenCalledTimes(0);
+
+    act(() => ws.open());
+    await h.flush();
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(ws.send.mock.calls[0]![0]).query).toBe('buffered');
+  });
+
+  it('after reconnect, re-sends current query on new connection open', async () => {
+    const h = renderHookHarness();
+
+    await h.flush();
+    const ws1 = MockWebSocket.instances[0]!;
+    act(() => ws1.open());
+    await h.flush();
+
+    act(() => h.getLatest().setQuery('stay'));
+    await h.flush();
+    act(() => vi.advanceTimersByTime(1000));
+    await h.flush();
+    expect(ws1.send).toHaveBeenCalledTimes(1);
+
+    act(() => ws1.close());
+    await h.flush();
+
+    act(() => vi.advanceTimersByTime(5000));
+    await h.flush();
+    expect(MockWebSocket.instances.length).toBeGreaterThan(1);
+
+    const ws2 = MockWebSocket.instances[1]!;
+    act(() => ws2.open());
+    await h.flush();
+
+    expect(ws2.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(ws2.send.mock.calls[0]![0]).query).toBe('stay');
+  });
+
+  it('cleanup close does not schedule reconnect', async () => {
+    const h = renderHookHarness();
+
+    await h.flush();
+    expect(MockWebSocket.instances.length).toBe(1);
+
+    h.unmount();
+
+    act(() => vi.advanceTimersByTime(10000));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(MockWebSocket.instances.length).toBe(1);
   });
 });

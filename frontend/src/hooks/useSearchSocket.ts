@@ -19,6 +19,8 @@ export function useSearchSocket() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const latestReqIdRef = useRef(0);
+  const pendingQueryRef = useRef<string | null>(null);
+  const pendingWorkStatusRef = useRef<WorkStatus>('searching');
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryRef = useRef('');
@@ -26,7 +28,11 @@ export function useSearchSocket() {
 
   const sendSearch = useCallback((q: string, nextWorkStatus: WorkStatus) => {
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      pendingQueryRef.current = q;
+      pendingWorkStatusRef.current = nextWorkStatus;
+      return;
+    }
 
     const req_id = ++latestReqIdRef.current;
     const request: SearchRequest = { req_id, query: q };
@@ -66,6 +72,7 @@ export function useSearchSocket() {
 
   useEffect(() => {
     let closedByCleanup = false;
+    let isAlive = true;
 
     const connect = () => {
       if (reconnectTimerRef.current) {
@@ -73,29 +80,41 @@ export function useSearchSocket() {
         reconnectTimerRef.current = null;
       }
 
-      setConnectionStatus('connecting');
+      if (isAlive) setConnectionStatus('connecting');
 
       const ws = new WebSocket(buildWsUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (!isAlive) return;
         setConnectionStatus('ready');
+
+        const pending = pendingQueryRef.current;
+        if (pending && pending.trim()) {
+          // Flush at most one buffered query after connection is open.
+          pendingQueryRef.current = null;
+          sendSearch(pending, pendingWorkStatusRef.current);
+        } else {
+          const current = queryRef.current.trim();
+          if (current) sendSearch(current, 'searching');
+        }
       };
       ws.onmessage = onMessage;
       ws.onclose = () => {
+        if (closedByCleanup || !isAlive) return;
         setConnectionStatus('disconnected');
-        if (closedByCleanup) return;
         reconnectTimerRef.current = setTimeout(connect, RECONNECT_MS);
       };
       ws.onerror = (err) => {
         console.error('WS error:', err);
-        setConnectionStatus('error');
+        if (isAlive) setConnectionStatus('error');
       };
     };
 
     connect();
     return () => {
       closedByCleanup = true;
+      isAlive = false;
 
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
