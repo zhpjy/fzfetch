@@ -18,10 +18,12 @@ export default function App() {
     setQuery,
     results,
     setResults,
-    status,
+    connectionStatus,
+    workStatus,
     isSearching,
-    triggerForceRefresh
   } = useSearchSocket();
+
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const onGhostFound = useCallback((path: string) => {
     setResults(prev => prev.filter(item => item.path !== path));
@@ -29,9 +31,15 @@ export default function App() {
 
   const { handleDownload, downloadingPath, toast, setToast } = useDownload(onGhostFound);
 
-  const { selectedIndex } = useKeyboardNavigation(results, handleDownload);
+  const { selectedIndex } = useKeyboardNavigation(results, handleDownload, () => {
+    setQuery('');
+    inputRef.current?.focus();
+  });
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const trimmedQuery = query.trim();
+  const showWaiting = trimmedQuery.length === 0;
+  const showNoMatches = !showWaiting && !isSearching && results.length === 0;
+  const showSearching = !showWaiting && isSearching && results.length === 0;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-300 font-mono flex flex-col items-center select-none overflow-hidden">
@@ -44,9 +52,8 @@ export default function App() {
         </div>
         
         <StatusIndicator 
-          status={status} 
-          isSearching={isSearching} 
-          onRefresh={triggerForceRefresh} 
+          connectionStatus={connectionStatus}
+          workStatus={workStatus}
         />
       </div>
 
@@ -71,7 +78,7 @@ export default function App() {
         <div className="border border-zinc-800 rounded-xl flex-1 overflow-hidden flex flex-col bg-zinc-900/50 shadow-inner relative mt-4">
           
           {/* Progress bar for index refresh */}
-          {status === 'refreshing' && (
+          {workStatus === 'refreshing' && (
             <div className="h-0.5 w-full bg-zinc-800 overflow-hidden absolute top-0">
                <div className="h-full bg-emerald-500 w-1/3 animate-shimmer" />
             </div>
@@ -129,13 +136,21 @@ export default function App() {
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center opacity-10">
-                 {status === 'refreshing' ? (
+                 {workStatus === 'refreshing' ? (
                     <Loader2 size={48} className="animate-spin mb-4" />
                  ) : (
                     <Terminal size={64} className="mb-4" />
                  )}
                  <p className="text-sm tracking-[0.4em] font-bold uppercase">
-                   {status === 'refreshing' ? 'Scanning file system' : 'Waiting for input'}
+                   {workStatus === 'refreshing'
+                     ? 'Scanning file system'
+                     : showWaiting
+                       ? 'Waiting for input'
+                       : showSearching
+                         ? 'Searching'
+                         : showNoMatches
+                           ? 'No matches found'
+                           : 'Waiting for input'}
                  </p>
               </div>
             )}
