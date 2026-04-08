@@ -9,10 +9,14 @@ use fzfetch::config::AppConfig;
 use fzfetch::state::AppState;
 use fzfetch::web::build_app;
 
+fn build_env_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(build_env_filter())
         .init();
 
     let mut config = AppConfig::from_env()?;
@@ -49,4 +53,60 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Mutex, OnceLock};
+
+    use super::build_env_filter;
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    #[test]
+    fn build_env_filter_defaults_to_info_when_missing() {
+        let _guard = env_lock().lock().unwrap_or_else(|error| error.into_inner());
+        unsafe {
+            std::env::remove_var("RUST_LOG");
+        }
+
+        let filter = build_env_filter();
+
+        assert_eq!(filter.to_string(), "info");
+    }
+
+    #[test]
+    fn build_env_filter_uses_valid_rust_log_value() {
+        let _guard = env_lock().lock().unwrap_or_else(|error| error.into_inner());
+        unsafe {
+            std::env::set_var("RUST_LOG", "debug");
+        }
+
+        let filter = build_env_filter();
+
+        assert_eq!(filter.to_string(), "debug");
+
+        unsafe {
+            std::env::remove_var("RUST_LOG");
+        }
+    }
+
+    #[test]
+    fn build_env_filter_falls_back_to_info_when_rust_log_is_invalid() {
+        let _guard = env_lock().lock().unwrap_or_else(|error| error.into_inner());
+        unsafe {
+            std::env::set_var("RUST_LOG", "[invalid");
+        }
+
+        let filter = build_env_filter();
+
+        assert_eq!(filter.to_string(), "info");
+
+        unsafe {
+            std::env::remove_var("RUST_LOG");
+        }
+    }
 }
