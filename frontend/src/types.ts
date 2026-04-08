@@ -20,3 +20,7 @@ export interface IndexRefreshedBroadcast {
 export type WSMessage = SearchResponse | IndexRefreshedBroadcast;
 
 export type AppStatus = 'ready' | 'refreshing' | 'disconnected';
+
+export type ConnectionStatus = 'connected' | 'disconnected';
+
+export type WorkStatus = 'idle' | 'searching' | 'indexing';
