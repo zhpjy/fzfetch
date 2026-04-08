@@ -1,14 +1,11 @@
 services:
   fzfetch:
-    build:
-      context: .
+    image: ghcr.io/zhpjy/fzfetch
     ports:
       - "3000:3000"
-    environment:
-      FZFETCH_ROOT: /files
-      FZFETCH_DATA_DIR: /data
     volumes:
-      - ./files:/files
+      - ./your-folder1:/files/your-folder1
+      - ./your-folder2:/files/your-folder2
       - fzfetch-data:/data
     restart: unless-stopped
 
