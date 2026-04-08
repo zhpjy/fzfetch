@@ -21,6 +21,6 @@ export type WSMessage = SearchResponse | IndexRefreshedBroadcast;
 
 export type AppStatus = 'ready' | 'refreshing' | 'disconnected';
 
-export type ConnectionStatus = 'connected' | 'disconnected';
+export type ConnectionStatus = 'ready' | 'connecting' | 'error';
 
-export type WorkStatus = 'idle' | 'searching' | 'indexing';
+export type WorkStatus = 'ready' | 'refreshing';

@@ -16,7 +16,7 @@ interface StatusIndicatorProps {
 interface LegacyStatusIndicatorProps {
   status: AppStatus;
   isSearching: boolean;
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }
 
 type Props = StatusIndicatorProps | LegacyStatusIndicatorProps;
@@ -26,46 +26,43 @@ export const StatusIndicator: React.FC<Props> = (props) => {
     'connectionStatus' in props
       ? props.connectionStatus
       : props.status === 'disconnected'
-        ? 'disconnected'
-        : 'connected';
+        ? 'error'
+        : 'ready';
 
   const workStatus: WorkStatus =
     'workStatus' in props
       ? props.workStatus
       : props.status === 'refreshing'
-        ? 'indexing'
-        : props.isSearching
-          ? 'searching'
-          : 'idle';
+        ? 'refreshing'
+        : 'ready';
 
   const getStatusConfig = () => {
-    if (connectionStatus === 'disconnected') {
+    if (connectionStatus !== 'ready') {
       return { label: '未连接服务器', color: 'bg-red-500 shadow-[0_0_8px_#ef4444]' };
     }
 
     switch (workStatus) {
-      case 'indexing':
+      case 'refreshing':
         return { label: '索引后台更新中', color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
-      case 'searching':
-      case 'idle':
-      default:
+      case 'ready':
+      default: {
         return { label: '系统就绪', color: 'bg-emerald-500 shadow-[0_0_8px_#10b981]' };
+      }
     }
   };
 
   const getWorkLabel = () => {
     switch (workStatus) {
-      case 'indexing':
+      case 'refreshing':
         return 'SCANNING';
-      case 'searching':
-        return 'SEARCHING';
-      case 'idle':
-      default:
+      case 'ready':
+      default: {
         return 'IDLE';
+      }
     }
   };
 
-  const isBusy = workStatus !== 'idle';
+  const isBusy = workStatus !== 'ready';
 
   const statusConfig = getStatusConfig();
 
