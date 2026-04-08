@@ -273,4 +273,51 @@ describe('useSearchSocket', () => {
 
     expect(MockWebSocket.instances.length).toBe(1);
   });
+
+  it('clearing query clears pending offline buffer; open does not send stale query', async () => {
+    const h = renderHookHarness();
+
+    await h.flush();
+    expect(MockWebSocket.instances.length).toBe(1);
+    const ws = MockWebSocket.instances[0]!;
+
+    // Type while disconnected; let debounce elapse so sendSearch would buffer.
+    act(() => h.getLatest().setQuery('stale'));
+    await h.flush();
+    act(() => vi.advanceTimersByTime(1000));
+    await h.flush();
+    expect(ws.send).toHaveBeenCalledTimes(0);
+
+    // User clears input before connection opens.
+    act(() => h.getLatest().setQuery(''));
+    await h.flush();
+
+    act(() => ws.open());
+    await h.flush();
+
+    expect(ws.send).toHaveBeenCalledTimes(0);
+  });
+
+  it('does not double-send when socket opens during debounce window', async () => {
+    const h = renderHookHarness();
+
+    await h.flush();
+    const ws = MockWebSocket.instances[0]!;
+
+    act(() => h.getLatest().setQuery('dup'));
+    await h.flush();
+
+    // Open the socket before debounce fires.
+    act(() => ws.open());
+    await h.flush();
+
+    // Still within debounce window: should not have sent yet.
+    expect(ws.send).toHaveBeenCalledTimes(0);
+
+    act(() => vi.advanceTimersByTime(1000));
+    await h.flush();
+
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(ws.send.mock.calls[0]![0]).query).toBe('dup');
+  });
 });

@@ -22,6 +22,7 @@ export function useSearchSocket() {
   const pendingQueryRef = useRef<string | null>(null);
   const pendingWorkStatusRef = useRef<WorkStatus>('searching');
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduledQueryRef = useRef<string | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryRef = useRef('');
   queryRef.current = query;
@@ -89,13 +90,24 @@ export function useSearchSocket() {
         if (!isAlive) return;
         setConnectionStatus('ready');
 
+        const scheduled = scheduledQueryRef.current;
+        const current = queryRef.current.trim();
+        if (debounceTimerRef.current && scheduled && scheduled === current) {
+          // Debounce is still pending for the current query; let it fire to avoid double-send.
+          return;
+        }
+
         const pending = pendingQueryRef.current;
         if (pending && pending.trim()) {
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+          }
+          scheduledQueryRef.current = null;
           // Flush at most one buffered query after connection is open.
           pendingQueryRef.current = null;
           sendSearch(pending, pendingWorkStatusRef.current);
         } else {
-          const current = queryRef.current.trim();
           if (current) sendSearch(current, 'searching');
         }
       };
@@ -138,15 +150,20 @@ export function useSearchSocket() {
     if (!next) {
       setResults([]);
       setWorkStatus('idle');
+      pendingQueryRef.current = null;
+      scheduledQueryRef.current = null;
       return;
     }
 
+    scheduledQueryRef.current = next;
     debounceTimerRef.current = setTimeout(() => {
+      scheduledQueryRef.current = null;
       sendSearch(next, 'searching');
     }, DEBOUNCE_MS);
 
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      scheduledQueryRef.current = null;
     };
   }, [query, sendSearch]);
 
