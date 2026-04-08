@@ -2,6 +2,14 @@ import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+const searchSocketState = vi.hoisted(() => ({
+  connectionStatus: 'ready' as 'connecting' | 'ready' | 'disconnected' | 'error',
+  workStatus: 'idle' as 'idle' | 'searching' | 'refreshing',
+  initialQuery: '',
+  initialResults: [] as any[],
+  isSearching: false,
+}));
+
 const kbNavState = vi.hoisted(() => ({
   lastOnEscape: undefined as undefined | (() => void),
 }));
@@ -14,16 +22,16 @@ vi.mock('./hooks/useSearchSocket', async () => {
   const React = await import('react');
   return {
     useSearchSocket: () => {
-      const [query, setQuery] = React.useState('');
-      const [results, setResults] = React.useState<any[]>([]);
+      const [query, setQuery] = React.useState(searchSocketState.initialQuery);
+      const [results, setResults] = React.useState<any[]>(searchSocketState.initialResults);
       return {
         query,
         setQuery,
         results,
         setResults,
-        connectionStatus: 'ready',
-        workStatus: 'idle',
-        isSearching: false,
+        connectionStatus: searchSocketState.connectionStatus,
+        workStatus: searchSocketState.workStatus,
+        isSearching: searchSocketState.isSearching,
       };
     },
   };
@@ -62,12 +70,35 @@ vi.mock('./components/StatusIndicator', async () => {
 import App from './App';
 
 describe('App', () => {
+  it('does not show No matches found while disconnected', () => {
+    searchSocketState.connectionStatus = 'disconnected';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = 'abc';
+    searchSocketState.initialResults = [];
+
+    render(<App />);
+    expect(screen.queryByText('No matches found')).not.toBeInTheDocument();
+  });
+
   it('shows Waiting for input on empty query', () => {
+    searchSocketState.connectionStatus = 'ready';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = '';
+    searchSocketState.initialResults = [];
+
     render(<App />);
     expect(screen.getByText('Waiting for input')).toBeInTheDocument();
   });
 
   it('shows No matches found when query is non-empty but results are empty', () => {
+    searchSocketState.connectionStatus = 'ready';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = '';
+    searchSocketState.initialResults = [];
+
     render(<App />);
 
     const input = screen.getByRole('textbox');
@@ -77,6 +108,12 @@ describe('App', () => {
   });
 
   it('passes onEscape to useKeyboardNavigation and clears query when triggered', () => {
+    searchSocketState.connectionStatus = 'ready';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = '';
+    searchSocketState.initialResults = [];
+
     render(<App />);
 
     const input = screen.getByRole('textbox') as HTMLInputElement;
@@ -94,6 +131,12 @@ describe('App', () => {
   });
 
   it('passes only new props to StatusIndicator', () => {
+    searchSocketState.connectionStatus = 'ready';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = '';
+    searchSocketState.initialResults = [];
+
     render(<App />);
     expect(statusIndicatorState.lastProps).not.toBeNull();
     expect(statusIndicatorState.lastProps).toMatchObject({ connectionStatus: 'ready', workStatus: 'idle' });
@@ -101,4 +144,3 @@ describe('App', () => {
     expect('onRefresh' in (statusIndicatorState.lastProps ?? {})).toBe(false);
   });
 });
-

@@ -38,7 +38,11 @@ export default function App() {
 
   const trimmedQuery = query.trim();
   const showWaiting = trimmedQuery.length === 0;
-  const showNoMatches = !showWaiting && !isSearching && results.length === 0;
+  const showNoMatches =
+    !showWaiting &&
+    connectionStatus === 'ready' &&
+    !isSearching &&
+    results.length === 0;
   const showSearching = !showWaiting && isSearching && results.length === 0;
 
   return (
