@@ -19,12 +19,27 @@ async fn main() -> anyhow::Result<()> {
 
     let mut config = AppConfig::from_env()?;
     config.canonicalize_root_dir()?;
+    tracing::info!(
+        root_dir = %config.canonical_root_dir.display(),
+        cache_file = %config.cache_file.display(),
+        refresh_ttl_secs = config.refresh_ttl.as_secs(),
+        idle_ttl_secs = config.idle_ttl.as_secs(),
+        cleanup_interval_secs = config.cleanup_interval.as_secs(),
+        top_k = config.top_k,
+        "backend configuration loaded"
+    );
 
     let cache_status = ensure_cache_layout(&config.data_dir, &config.cache_file)?;
     config.force_initial_refresh = cache_status == CacheLayoutStatus::Created;
+    tracing::info!(
+        cache_file = %config.cache_file.display(),
+        cache_created = cache_status == CacheLayoutStatus::Created,
+        "cache layout prepared"
+    );
 
     let state = Arc::new(AppState::new(config));
     let cleanup_manager = state.index_manager.clone();
+    tracing::info!("index cleanup loop started");
     tokio::spawn(async move {
         cleanup_manager.run_cleanup_loop().await;
     });

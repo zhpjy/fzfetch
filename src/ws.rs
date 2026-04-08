@@ -57,6 +57,7 @@ fn refresh_notification_message(_payload: String) -> Message {
 }
 
 async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
+    tracing::info!("websocket client connected");
     let latest_req_id = Arc::new(AtomicU64::new(0));
     let mut refresh_rx = state.refresh_tx.subscribe();
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<Message>(64);
@@ -82,6 +83,12 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                     Ok(Message::Text(text)) => {
                         match serde_json::from_str::<SearchRequest>(&text) {
                             Ok(request) => {
+                                tracing::debug!(
+                                    req_id = request.req_id,
+                                    query = %request.query,
+                                    query_len = request.query.chars().count(),
+                                    "websocket search request received"
+                                );
                                 latest_req_id.store(request.req_id, Ordering::Release);
                                 search_tasks.spawn(run_search(
                                     state.clone(),
@@ -96,11 +103,15 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         }
                     }
                     Ok(Message::Ping(payload)) => {
+                        tracing::debug!(payload_len = payload.len(), "websocket ping received");
                         if outbound_tx.send(Message::Pong(payload)).await.is_err() {
                             break;
                         }
                     }
-                    Ok(Message::Close(_)) => break,
+                    Ok(Message::Close(_)) => {
+                        tracing::info!("websocket close frame received");
+                        break;
+                    }
                     Ok(_) => {}
                     Err(error) => {
                         tracing::warn!(?error, "websocket receive failed");
@@ -111,6 +122,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             refresh_result = refresh_rx.recv() => {
                 match refresh_result {
                     Ok(payload) => {
+                        tracing::debug!(payload = %payload, "websocket refresh broadcast queued");
                         if outbound_tx.send(refresh_notification_message(payload)).await.is_err() {
                             break;
                         }
@@ -141,6 +153,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     if let Err(error) = writer_task.await {
         tracing::warn!(?error, "websocket writer task failed");
     }
+    tracing::info!("websocket client disconnected");
 }
 
 async fn run_search(
@@ -155,9 +168,19 @@ async fn run_search(
         Ok(hits) => {
             // 同连接内只保留最新 req_id 的响应，旧结果直接丢弃。
             if should_drop_response(&latest_req_id, req_id) {
+                tracing::debug!(
+                    req_id,
+                    latest_req_id = latest_req_id.load(Ordering::Acquire),
+                    "stale websocket search response dropped"
+                );
                 return;
             }
 
+            tracing::debug!(
+                req_id,
+                result_count = hits.len(),
+                "websocket search completed"
+            );
             let response = SearchResponse {
                 req_id,
                 data: hits.into_iter().map(SearchResponseItem::from).collect(),
@@ -165,6 +188,7 @@ async fn run_search(
 
             match serde_json::to_string(&response) {
                 Ok(payload) => {
+                    tracing::debug!(req_id, "websocket search response queued");
                     let _ = outbound_tx.send(Message::Text(payload.into())).await;
                 }
                 Err(error) => {
