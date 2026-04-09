@@ -92,11 +92,6 @@ export const StatusIndicator: React.FC<Props> = (props) => {
 
   return (
     <div className="flex items-center gap-6 text-[10px]">
-      <div className="flex items-center gap-2 px-2 py-1 rounded border border-zinc-800 bg-zinc-900 min-w-[120px]">
-        <span className={cn("h-2 w-2 rounded-full", statusConfig.color)} />
-        <span className="uppercase font-bold opacity-60 tracking-tight">{statusConfig.label}</span>
-      </div>
-
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2 h-6">
           {isBusy ? (
@@ -108,6 +103,11 @@ export const StatusIndicator: React.FC<Props> = (props) => {
             {getWorkLabel()}
           </span>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 px-2 py-1 rounded border border-zinc-800 bg-zinc-900 min-w-[120px]">
+        <span className={cn("h-2 w-2 rounded-full", statusConfig.color)} />
+        <span className="uppercase font-bold opacity-60 tracking-tight">{statusConfig.label}</span>
       </div>
     </div>
   );

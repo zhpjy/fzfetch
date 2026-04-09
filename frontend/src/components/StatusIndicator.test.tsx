@@ -61,4 +61,13 @@ describe('StatusIndicator', () => {
     expect(screen.getByText('SEARCHING')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /刷新/ })).toBeNull();
   });
+
+  it('renders work status before index status', () => {
+    render(<StatusIndicator connectionStatus="ready" indexStatus="ready" workStatus="idle" />);
+
+    const workLabel = screen.getByText('IDLE');
+    const indexLabel = screen.getByText('索引就绪');
+
+    expect(workLabel.compareDocumentPosition(indexLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
