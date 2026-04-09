@@ -1,10 +1,11 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
-use fzfetch::cache::{ensure_cache_layout, write_cache_snapshot};
+use fzfetch::cache::{FileRecord, ensure_cache_layout, write_cache_snapshot};
 use fzfetch::config::AppConfig;
+use fzfetch::state::IndexStatus;
 use fzfetch::state::AppState;
 
 fn build_config(root_dir: &Path, data_dir: PathBuf, cache_file: PathBuf) -> AppConfig {
@@ -26,23 +27,29 @@ async fn ensure_loaded_builds_search_engine_from_cache() {
     let root = temp.path().join("root");
     fs::create_dir_all(&root).unwrap();
 
-    let alpha = root
-        .join("alpha.txt")
-        .canonicalize()
-        .unwrap_or_else(|_| root.join("alpha.txt"));
-    let beta = root
-        .join("beta.txt")
-        .canonicalize()
-        .unwrap_or_else(|_| root.join("beta.txt"));
+    let alpha = root.join("alpha.txt");
+    let beta = root.join("beta.txt");
 
     let data_dir = temp.path().join("data");
     let cache_file = data_dir.join("cache.txt");
     ensure_cache_layout(&data_dir, &cache_file).unwrap();
     write_cache_snapshot(
         &cache_file,
-        &HashSet::from([
-            alpha.to_string_lossy().to_string(),
-            beta.to_string_lossy().to_string(),
+        &HashMap::from([
+            (
+                alpha.to_string_lossy().to_string(),
+                FileRecord {
+                    path: alpha.to_string_lossy().to_string(),
+                    size_bytes: Some(11),
+                },
+            ),
+            (
+                beta.to_string_lossy().to_string(),
+                FileRecord {
+                    path: beta.to_string_lossy().to_string(),
+                    size_bytes: Some(22),
+                },
+            ),
         ]),
     )
     .unwrap();
@@ -56,8 +63,10 @@ async fn ensure_loaded_builds_search_engine_from_cache() {
 
     assert_eq!(alpha_hits.len(), 1);
     assert_eq!(alpha_hits[0].path, alpha.to_string_lossy());
+    assert_eq!(alpha_hits[0].size_bytes, Some(11));
     assert_eq!(beta_hits.len(), 1);
     assert_eq!(beta_hits[0].path, beta.to_string_lossy());
+    assert_eq!(beta_hits[0].size_bytes, Some(22));
     assert!(state.index_manager.runtime.read().await.is_some());
 }
 
@@ -93,7 +102,7 @@ async fn refresh_due_uses_cache_mtime() {
     let data_dir = temp.path().join("data");
     let cache_file = data_dir.join("cache.txt");
     ensure_cache_layout(&data_dir, &cache_file).unwrap();
-    write_cache_snapshot(&cache_file, &HashSet::new()).unwrap();
+    write_cache_snapshot(&cache_file, &HashMap::new()).unwrap();
 
     let mut config = build_config(&root, data_dir, cache_file);
     config.refresh_ttl = Duration::from_secs(60);
@@ -126,7 +135,7 @@ async fn refresh_success_updates_last_refresh_at_from_cache_mtime() {
     let data_dir = temp.path().join("data");
     let cache_file = data_dir.join("cache.txt");
     ensure_cache_layout(&data_dir, &cache_file).unwrap();
-    write_cache_snapshot(&cache_file, &HashSet::new()).unwrap();
+    write_cache_snapshot(&cache_file, &HashMap::new()).unwrap();
     tokio::time::sleep(Duration::from_millis(25)).await;
 
     let state = AppState::new(build_config(&root, data_dir, cache_file.clone()));
@@ -136,10 +145,7 @@ async fn refresh_success_updates_last_refresh_at_from_cache_mtime() {
     let hits = state.index_manager.search("fresh").await.unwrap();
     assert!(hits.is_empty());
 
-    let refresh_msg = tokio::time::timeout(Duration::from_secs(2), refresh_rx.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    let refresh_msg = recv_until_index_refreshed(&mut refresh_rx).await;
     assert_eq!(refresh_msg, "{\"type\":\"INDEX_REFRESHED\"}");
 
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -187,10 +193,7 @@ async fn first_use_refreshes_when_cache_was_just_created() {
     let hits = state.index_manager.search("fresh").await.unwrap();
     assert!(hits.is_empty());
 
-    let refresh_msg = tokio::time::timeout(Duration::from_secs(2), refresh_rx.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    let refresh_msg = recv_until_index_refreshed(&mut refresh_rx).await;
     assert_eq!(refresh_msg, "{\"type\":\"INDEX_REFRESHED\"}");
 
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -208,4 +211,39 @@ async fn first_use_refreshes_when_cache_was_just_created() {
 
     let cache_contents = fs::read_to_string(&state.config.cache_file).unwrap();
     assert!(cache_contents.contains(&fresh.to_string_lossy().to_string()));
+}
+
+#[tokio::test]
+async fn index_status_is_pending_before_bootstrap_refresh_runs() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("root");
+    fs::create_dir_all(&root).unwrap();
+
+    let data_dir = temp.path().join("data");
+    let cache_file = data_dir.join("cache.txt");
+    ensure_cache_layout(&data_dir, &cache_file).unwrap();
+
+    let mut config = build_config(&root, data_dir, cache_file);
+    config.force_initial_refresh = true;
+
+    let state = AppState::new(config);
+
+    assert_eq!(state.index_manager.current_status().await, IndexStatus::Pending);
+}
+
+async fn recv_until_index_refreshed(
+    refresh_rx: &mut tokio::sync::broadcast::Receiver<String>,
+) -> String {
+    let deadline = Instant::now() + Duration::from_secs(2);
+
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let msg = tokio::time::timeout(remaining, refresh_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        if msg == "{\"type\":\"INDEX_REFRESHED\"}" {
+            return msg;
+        }
+    }
 }

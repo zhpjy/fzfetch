@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
 use crate::search::SearchHit;
-use crate::state::AppState;
+use crate::state::{AppState, IndexStatus};
 
 const INDEX_REFRESHED_EVENT: &str = r#"{"type":"INDEX_REFRESHED"}"#;
 
@@ -58,6 +58,15 @@ fn refresh_notification_message(_payload: String) -> Message {
     Message::Text(INDEX_REFRESHED_EVENT.into())
 }
 
+fn index_status_message(status: IndexStatus) -> Message {
+    let state = match status {
+        IndexStatus::Pending => "pending",
+        IndexStatus::Refreshing => "refreshing",
+        IndexStatus::Ready => "ready",
+    };
+    Message::Text(format!("{{\"type\":\"INDEX_STATUS\",\"state\":\"{state}\"}}").into())
+}
+
 async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     tracing::info!("websocket client connected");
     let latest_req_id = Arc::new(AtomicU64::new(0));
@@ -73,6 +82,9 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             }
         }
     });
+
+    let initial_status = state.index_manager.current_status().await;
+    let _ = outbound_tx.send(index_status_message(initial_status)).await;
 
     loop {
         tokio::select! {
@@ -216,7 +228,9 @@ pub(crate) fn assert_stale_epoch_is_dropped() {
 mod tests {
     use axum::extract::ws::Message;
 
-    use super::{assert_stale_epoch_is_dropped, refresh_notification_message};
+    use crate::state::IndexStatus;
+
+    use super::{assert_stale_epoch_is_dropped, index_status_message, refresh_notification_message};
 
     #[test]
     fn stale_epoch_is_dropped() {
@@ -230,6 +244,16 @@ mod tests {
         assert_eq!(
             message,
             Message::Text("{\"type\":\"INDEX_REFRESHED\"}".into())
+        );
+    }
+
+    #[test]
+    fn index_status_message_serializes_ready_state() {
+        let message = index_status_message(IndexStatus::Ready);
+
+        assert_eq!(
+            message,
+            Message::Text("{\"type\":\"INDEX_STATUS\",\"state\":\"ready\"}".into())
         );
     }
 }

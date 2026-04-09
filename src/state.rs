@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -8,10 +7,10 @@ use tokio::task;
 use tokio::time::sleep;
 
 use crate::cache::{
-    CacheLayoutStatus, ensure_cache_layout, load_cache_paths, write_cache_snapshot,
+    CacheLayoutStatus, FileRecord, ensure_cache_layout, load_cache_records, write_cache_snapshot,
 };
 use crate::config::AppConfig;
-use crate::scanner::{diff_paths, scan_root_files};
+use crate::scanner::{diff_records, scan_root_files};
 use crate::search::{SearchEngine, SearchHit};
 
 pub struct AppState {
@@ -32,6 +31,13 @@ impl AppState {
             refresh_tx,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexStatus {
+    Pending,
+    Refreshing,
+    Ready,
 }
 
 pub struct IndexRuntime {
@@ -88,11 +94,11 @@ impl IndexManager {
             "lazy index load started"
         );
         let cache_status = ensure_cache_layout(&self.config.data_dir, &self.config.cache_file)?;
-        let paths = load_cache_paths(&self.config.cache_file)?;
-        let path_count = paths.len();
+        let records = load_cache_records(&self.config.cache_file)?;
+        let path_count = records.len();
 
         let mut engine = SearchEngine::new();
-        engine.seed(paths);
+        engine.seed(records.into_values());
 
         let last_refresh_at = std::fs::metadata(&self.config.cache_file)
             .and_then(|meta| meta.modified())
@@ -125,6 +131,28 @@ impl IndexManager {
 
         let mut engine = runtime.engine.lock().await;
         Ok(engine.search(query, self.config.top_k))
+    }
+
+    pub async fn current_status(&self) -> IndexStatus {
+        let runtime = self.runtime.read().await.clone();
+        match runtime {
+            Some(runtime) => {
+                if runtime.refreshing.load(Ordering::Acquire) {
+                    IndexStatus::Refreshing
+                } else if runtime.bootstrap_refresh_pending.load(Ordering::Acquire) {
+                    IndexStatus::Pending
+                } else {
+                    IndexStatus::Ready
+                }
+            }
+            None => {
+                if self.config.force_initial_refresh {
+                    IndexStatus::Pending
+                } else {
+                    IndexStatus::Ready
+                }
+            }
+        }
     }
 
     pub async fn maybe_unload_idle(&self) {
@@ -220,6 +248,10 @@ impl IndexManager {
             );
         }
 
+        let _ = self
+            .refresh_tx
+            .send(index_status_event(IndexStatus::Refreshing));
+
         let config = self.config.clone();
         let refresh_tx = self.refresh_tx.clone();
         tokio::spawn(async move {
@@ -231,14 +263,14 @@ impl IndexManager {
                 );
                 let config_for_scan = config.clone();
                 let blocking_output = task::spawn_blocking(move || -> anyhow::Result<_> {
-                    let old_paths = load_cache_paths(&config_for_scan.cache_file)?;
-                    let new_paths = scan_root_files(&config_for_scan.canonical_root_dir)?;
-                    let diff = diff_paths(&old_paths, &new_paths);
-                    write_cache_snapshot(&config_for_scan.cache_file, &new_paths)?;
+                    let old_records = load_cache_records(&config_for_scan.cache_file)?;
+                    let new_records = scan_root_files(&config_for_scan.canonical_root_dir)?;
+                    let diff = diff_records(&old_records, &new_records);
+                    write_cache_snapshot(&config_for_scan.cache_file, &new_records)?;
                     let refreshed_cache_mtime = cache_mtime(&config_for_scan.cache_file)?;
 
                     Ok(BlockingRefreshOutput {
-                        new_paths,
+                        new_records,
                         diff,
                         refreshed_cache_mtime,
                     })
@@ -246,7 +278,7 @@ impl IndexManager {
                 .await
                 .map_err(anyhow::Error::from)??;
                 tracing::info!(
-                    new_path_count = blocking_output.new_paths.len(),
+                    new_path_count = blocking_output.new_records.len(),
                     added = blocking_output.diff.added.len(),
                     removed = blocking_output.diff.removed.len(),
                     "background index refresh scan completed"
@@ -256,7 +288,7 @@ impl IndexManager {
                     // 路径全集与 matcher 要一起推进，避免搜索看到半更新状态。
                     let mut engine = runtime.engine.lock().await;
                     engine.apply_diff(
-                        &blocking_output.new_paths,
+                        &blocking_output.new_records,
                         &blocking_output.diff.added,
                         &blocking_output.diff.removed,
                     );
@@ -264,13 +296,14 @@ impl IndexManager {
                 *runtime.last_refresh_at.lock().await = blocking_output.refreshed_cache_mtime;
                 tracing::info!(
                     cache_file = %config.cache_file.display(),
-                    path_count = blocking_output.new_paths.len(),
+                    path_count = blocking_output.new_records.len(),
                     "cache snapshot updated after refresh"
                 );
                 runtime
                     .bootstrap_refresh_pending
                     .store(false, Ordering::Release);
                 let _ = refresh_tx.send("{\"type\":\"INDEX_REFRESHED\"}".to_string());
+                let _ = refresh_tx.send(index_status_event(IndexStatus::Ready));
                 tracing::info!("index refresh broadcast sent to websocket subscribers");
                 Ok(())
             }
@@ -281,6 +314,15 @@ impl IndexManager {
             }
         });
     }
+}
+
+fn index_status_event(status: IndexStatus) -> String {
+    let state = match status {
+        IndexStatus::Pending => "pending",
+        IndexStatus::Refreshing => "refreshing",
+        IndexStatus::Ready => "ready",
+    };
+    format!("{{\"type\":\"INDEX_STATUS\",\"state\":\"{state}\"}}")
 }
 
 impl IndexManager {
@@ -295,7 +337,7 @@ impl IndexManager {
 }
 
 struct BlockingRefreshOutput {
-    new_paths: HashSet<String>,
+    new_records: std::collections::HashMap<String, FileRecord>,
     diff: crate::scanner::IndexDiff,
     refreshed_cache_mtime: SystemTime,
 }

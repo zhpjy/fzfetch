@@ -170,6 +170,27 @@ describe('useSearchSocket', () => {
     expect(sent2.req_id).toBeGreaterThan(req1);
   });
 
+  it('tracks backend index status pushed over websocket', async () => {
+    const h = renderHookHarness();
+
+    await h.flush();
+    const ws = MockWebSocket.instances[0]!;
+    act(() => ws.open());
+    await h.flush();
+
+    act(() => ws.receive({ type: 'INDEX_STATUS', state: 'pending' }));
+    await h.flush();
+    expect(h.getLatest().indexStatus).toBe('pending');
+
+    act(() => ws.receive({ type: 'INDEX_STATUS', state: 'refreshing' }));
+    await h.flush();
+    expect(h.getLatest().indexStatus).toBe('refreshing');
+
+    act(() => ws.receive({ type: 'INDEX_STATUS', state: 'ready' }));
+    await h.flush();
+    expect(h.getLatest().indexStatus).toBe('ready');
+  });
+
   it('reflects connectionStatus changes and reconnects after close', async () => {
     const h = renderHookHarness();
 

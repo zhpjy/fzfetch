@@ -1,6 +1,6 @@
 import React from 'react';
 import { Database, Loader2 } from 'lucide-react';
-import { AppStatus, ConnectionStatus, WorkStatus } from '../types';
+import { AppStatus, ConnectionStatus, IndexStatus, WorkStatus } from '../types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -10,6 +10,7 @@ function cn(...inputs: ClassValue[]) {
 
 interface StatusIndicatorProps {
   connectionStatus: ConnectionStatus;
+  indexStatus: IndexStatus;
   workStatus: WorkStatus;
 }
 
@@ -38,6 +39,15 @@ export const StatusIndicator: React.FC<Props> = (props) => {
           ? 'searching'
           : 'idle';
 
+  const indexStatus: IndexStatus =
+    'indexStatus' in props
+      ? props.indexStatus
+      : props.status === 'refreshing'
+        ? 'refreshing'
+        : props.status === 'ready'
+          ? 'ready'
+          : 'unknown';
+
   const getStatusConfig = () => {
     switch (connectionStatus) {
       case 'connecting':
@@ -51,11 +61,13 @@ export const StatusIndicator: React.FC<Props> = (props) => {
         break;
     }
 
-    switch (workStatus) {
+    switch (indexStatus) {
+      case 'pending':
+        return { label: '索引待初始化', color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
       case 'refreshing':
         return { label: '索引后台更新中', color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
-      case 'idle':
-      case 'searching':
+      case 'unknown':
+        return { label: '索引状态未知', color: 'bg-zinc-500 shadow-[0_0_8px_#71717a]' };
       default:
         return { label: '索引就绪', color: 'bg-emerald-500 shadow-[0_0_8px_#10b981]' };
     }
@@ -73,7 +85,8 @@ export const StatusIndicator: React.FC<Props> = (props) => {
     }
   };
 
-  const isBusy = workStatus !== 'idle' || connectionStatus === 'connecting';
+  const isBusy =
+    workStatus !== 'idle' || connectionStatus === 'connecting' || indexStatus === 'refreshing';
 
   const statusConfig = getStatusConfig();
 

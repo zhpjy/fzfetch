@@ -18,10 +18,17 @@ export interface IndexRefreshedBroadcast {
   type: "INDEX_REFRESHED";
 }
 
-export type WSMessage = SearchResponse | IndexRefreshedBroadcast;
+export interface IndexStatusMessage {
+  type: "INDEX_STATUS";
+  state: IndexStatus;
+}
+
+export type WSMessage = SearchResponse | IndexRefreshedBroadcast | IndexStatusMessage;
 
 export type AppStatus = 'ready' | 'refreshing' | 'disconnected';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'disconnected' | 'error';
+
+export type IndexStatus = 'unknown' | 'pending' | 'refreshing' | 'ready';
 
 export type WorkStatus = 'idle' | 'searching' | 'refreshing';

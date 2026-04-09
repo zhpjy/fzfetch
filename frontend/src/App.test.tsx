@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const searchSocketState = vi.hoisted(() => ({
   connectionStatus: 'ready' as 'connecting' | 'ready' | 'disconnected' | 'error',
+  indexStatus: 'ready' as 'unknown' | 'pending' | 'refreshing' | 'ready',
   workStatus: 'idle' as 'idle' | 'searching' | 'refreshing',
   initialQuery: '',
   initialResults: [] as any[],
@@ -30,6 +31,7 @@ vi.mock('./hooks/useSearchSocket', async () => {
         results,
         setResults,
         connectionStatus: searchSocketState.connectionStatus,
+        indexStatus: searchSocketState.indexStatus,
         workStatus: searchSocketState.workStatus,
         isSearching: searchSocketState.isSearching,
       };
@@ -139,7 +141,7 @@ describe('App', () => {
 
     render(<App />);
     expect(statusIndicatorState.lastProps).not.toBeNull();
-    expect(statusIndicatorState.lastProps).toMatchObject({ connectionStatus: 'ready', workStatus: 'idle' });
+    expect(statusIndicatorState.lastProps).toMatchObject({ connectionStatus: 'ready', indexStatus: 'ready', workStatus: 'idle' });
     expect('status' in (statusIndicatorState.lastProps ?? {})).toBe(false);
     expect('onRefresh' in (statusIndicatorState.lastProps ?? {})).toBe(false);
   });

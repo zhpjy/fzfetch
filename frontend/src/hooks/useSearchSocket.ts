@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ConnectionStatus, SearchHit, SearchRequest, WorkStatus } from '../types';
+import { ConnectionStatus, IndexStatus, SearchHit, SearchRequest, WorkStatus } from '../types';
 
 const DEBOUNCE_MS = 100;
 const RECONNECT_MS = 1000;
@@ -14,6 +14,7 @@ export function useSearchSocket() {
   const [results, setResults] = useState<SearchHit[]>([]);
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
+  const [indexStatus, setIndexStatus] = useState<IndexStatus>('unknown');
   const [workStatus, setWorkStatus] = useState<WorkStatus>('idle');
   const isSearching = workStatus !== 'idle';
 
@@ -52,10 +53,28 @@ export function useSearchSocket() {
         typeof msg === 'object' &&
         msg !== null &&
         'type' in msg &&
+        (msg as { type?: unknown }).type === 'INDEX_STATUS'
+      ) {
+        const state = (msg as { state?: unknown }).state;
+        if (
+          state === 'unknown' ||
+          state === 'pending' ||
+          state === 'refreshing' ||
+          state === 'ready'
+        ) {
+          setIndexStatus(state);
+        }
+        return;
+      }
+
+      if (
+        typeof msg === 'object' &&
+        msg !== null &&
+        'type' in msg &&
         (msg as { type?: unknown }).type === 'INDEX_REFRESHED'
       ) {
         const current = queryRef.current.trim();
-        if (current) sendSearch(current, 'refreshing');
+        if (current) sendSearch(current, 'searching');
         return;
       }
 
@@ -118,11 +137,15 @@ export function useSearchSocket() {
       ws.onclose = () => {
         if (closedByCleanup || !isAlive) return;
         setConnectionStatus('disconnected');
+        setIndexStatus('unknown');
         reconnectTimerRef.current = setTimeout(connect, RECONNECT_MS);
       };
       ws.onerror = (err) => {
         console.error('WS error:', err);
-        if (isAlive) setConnectionStatus('error');
+        if (isAlive) {
+          setConnectionStatus('error');
+          setIndexStatus('unknown');
+        }
       };
     };
 
@@ -176,6 +199,7 @@ export function useSearchSocket() {
     results,
     setResults,
     connectionStatus,
+    indexStatus,
     workStatus,
     isSearching,
   };

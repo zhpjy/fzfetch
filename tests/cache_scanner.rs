@@ -1,13 +1,13 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use fzfetch::cache::{
-    CacheLayoutStatus, ensure_cache_layout, load_cache_paths, load_cache_paths_from_reader,
-    write_cache_snapshot,
+    CacheLayoutStatus, FileRecord, ensure_cache_layout, load_cache_records,
+    load_cache_records_from_reader, write_cache_snapshot,
 };
-use fzfetch::scanner::{diff_paths, scan_root_files};
+use fzfetch::scanner::{diff_records, scan_root_files};
 
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -150,25 +150,55 @@ fn config_default_for_uses_canonical_path_when_root_exists() {
 }
 
 #[test]
-fn load_cache_paths_ignores_empty_lines() {
+fn load_cache_records_reads_legacy_path_only_lines() {
     let temp = tempfile::tempdir().unwrap();
     let cache_file = temp.path().join("cache.txt");
     std::fs::write(&cache_file, "\n/tmp/a\n\n   \n/tmp/b\n").unwrap();
 
-    let paths = load_cache_paths(&cache_file).unwrap();
+    let records = load_cache_records(&cache_file).unwrap();
 
-    let expected = HashSet::from([String::from("/tmp/a"), String::from("/tmp/b")]);
-    assert_eq!(paths, expected);
+    let expected = HashMap::from([
+        (
+            String::from("/tmp/a"),
+            FileRecord {
+                path: String::from("/tmp/a"),
+                size_bytes: None,
+            },
+        ),
+        (
+            String::from("/tmp/b"),
+            FileRecord {
+                path: String::from("/tmp/b"),
+                size_bytes: None,
+            },
+        ),
+    ]);
+    assert_eq!(records, expected);
 }
 
 #[test]
-fn load_cache_paths_from_reader_ignores_empty_lines() {
-    let reader = Cursor::new("\n/tmp/a\n\n   \n/tmp/b\n");
+fn load_cache_records_from_reader_reads_record_lines() {
+    let reader = Cursor::new("5\t/tmp/a\n-\t/tmp/b\n");
 
-    let paths = load_cache_paths_from_reader(reader).unwrap();
+    let records = load_cache_records_from_reader(reader).unwrap();
 
-    let expected = HashSet::from([String::from("/tmp/a"), String::from("/tmp/b")]);
-    assert_eq!(paths, expected);
+    let expected = HashMap::from([
+        (
+            String::from("/tmp/a"),
+            FileRecord {
+                path: String::from("/tmp/a"),
+                size_bytes: Some(5),
+            },
+        ),
+        (
+            String::from("/tmp/b"),
+            FileRecord {
+                path: String::from("/tmp/b"),
+                size_bytes: None,
+            },
+        ),
+    ]);
+    assert_eq!(records, expected);
 }
 
 #[test]
@@ -177,22 +207,86 @@ fn write_cache_snapshot_overwrites_previous_content() {
     let cache_file = temp.path().join("cache.txt");
     std::fs::write(&cache_file, "/old/path\n").unwrap();
 
-    let paths = HashSet::from([String::from("/z"), String::from("/a"), String::from("/m")]);
-    write_cache_snapshot(&cache_file, &paths).unwrap();
+    let records = HashMap::from([
+        (
+            String::from("/z"),
+            FileRecord {
+                path: String::from("/z"),
+                size_bytes: Some(9),
+            },
+        ),
+        (
+            String::from("/a"),
+            FileRecord {
+                path: String::from("/a"),
+                size_bytes: Some(1),
+            },
+        ),
+        (
+            String::from("/m"),
+            FileRecord {
+                path: String::from("/m"),
+                size_bytes: None,
+            },
+        ),
+    ]);
+    write_cache_snapshot(&cache_file, &records).unwrap();
 
     let written = std::fs::read_to_string(&cache_file).unwrap();
-    assert_eq!(written, "/a\n/m\n/z\n");
+    assert_eq!(written, "1\t/a\n-\t/m\n9\t/z\n");
 }
 
 #[test]
-fn diff_paths_reports_added_and_removed() {
-    let old_paths = HashSet::from([String::from("/a"), String::from("/b")]);
-    let new_paths = HashSet::from([String::from("/b"), String::from("/c")]);
+fn diff_records_reports_added_removed_and_changed_metadata() {
+    let old_records = HashMap::from([
+        (
+            String::from("/a"),
+            FileRecord {
+                path: String::from("/a"),
+                size_bytes: Some(1),
+            },
+        ),
+        (
+            String::from("/b"),
+            FileRecord {
+                path: String::from("/b"),
+                size_bytes: Some(2),
+            },
+        ),
+    ]);
+    let new_records = HashMap::from([
+        (
+            String::from("/b"),
+            FileRecord {
+                path: String::from("/b"),
+                size_bytes: Some(3),
+            },
+        ),
+        (
+            String::from("/c"),
+            FileRecord {
+                path: String::from("/c"),
+                size_bytes: Some(4),
+            },
+        ),
+    ]);
 
-    let diff = diff_paths(&old_paths, &new_paths);
+    let diff = diff_records(&old_records, &new_records);
 
-    assert_eq!(diff.added, vec![String::from("/c")]);
-    assert_eq!(diff.removed, vec![String::from("/a")]);
+    assert_eq!(
+        diff.added,
+        vec![
+            FileRecord {
+                path: String::from("/b"),
+                size_bytes: Some(3),
+            },
+            FileRecord {
+                path: String::from("/c"),
+                size_bytes: Some(4),
+            },
+        ]
+    );
+    assert_eq!(diff.removed, vec![String::from("/a"), String::from("/b")]);
 }
 
 #[test]
@@ -211,22 +305,52 @@ fn scan_root_files_only_collects_regular_files() {
 
     let files = scan_root_files(root).unwrap();
 
-    let expected = HashSet::from([
-        top_file
-            .canonicalize()
-            .unwrap()
-            .to_string_lossy()
-            .to_string(),
-        another_top_file
-            .canonicalize()
-            .unwrap()
-            .to_string_lossy()
-            .to_string(),
-        nested_file
-            .canonicalize()
-            .unwrap()
-            .to_string_lossy()
-            .to_string(),
+    let expected = HashMap::from([
+        (
+            top_file
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            FileRecord {
+                path: top_file
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                size_bytes: Some(1),
+            },
+        ),
+        (
+            another_top_file
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            FileRecord {
+                path: another_top_file
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                size_bytes: Some(1),
+            },
+        ),
+        (
+            nested_file
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            FileRecord {
+                path: nested_file
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                size_bytes: Some(1),
+            },
+        ),
     ]);
     assert_eq!(files, expected);
 }
@@ -248,11 +372,21 @@ fn scan_root_files_skips_invalid_utf8_paths_and_keeps_valid_ones() {
 
     let files = scan_root_files(root).unwrap();
 
-    let expected = HashSet::from([valid_file
-        .canonicalize()
-        .unwrap()
-        .to_string_lossy()
-        .to_string()]);
+    let expected = HashMap::from([(
+        valid_file
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .to_string(),
+        FileRecord {
+            path: valid_file
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            size_bytes: Some(2),
+        },
+    )]);
     assert_eq!(files, expected);
 }
 
@@ -278,7 +412,7 @@ fn scan_root_files_continues_when_walkdir_hits_unreadable_dir() {
     assert!(files.is_ok());
     let files = files.unwrap();
     assert!(
-        files.contains(
+        files.contains_key(
             &valid_file
                 .canonicalize()
                 .unwrap()

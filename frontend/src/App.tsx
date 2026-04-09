@@ -40,6 +40,7 @@ export default function App() {
     results,
     setResults,
     connectionStatus,
+    indexStatus,
     workStatus,
     isSearching,
   } = useSearchSocket();
@@ -62,6 +63,7 @@ export default function App() {
   const showNoMatches =
     !showWaiting &&
     connectionStatus === 'ready' &&
+    indexStatus === 'ready' &&
     !isSearching &&
     results.length === 0;
   const showSearching = !showWaiting && isSearching && results.length === 0;
@@ -78,6 +80,7 @@ export default function App() {
         
         <StatusIndicator 
           connectionStatus={connectionStatus}
+          indexStatus={indexStatus}
           workStatus={workStatus}
         />
       </div>
@@ -104,7 +107,7 @@ export default function App() {
         <div className="border border-zinc-800 rounded-xl flex-1 min-h-0 overflow-hidden flex flex-col bg-zinc-900/50 shadow-inner relative mt-4">
           
           {/* Progress bar for index refresh */}
-          {workStatus === 'refreshing' && (
+          {indexStatus === 'refreshing' && (
             <div className="h-0.5 w-full bg-zinc-800 overflow-hidden absolute top-0">
                <div className="h-full bg-emerald-500 w-1/3 animate-shimmer" />
             </div>
@@ -182,14 +185,16 @@ export default function App() {
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center opacity-10">
-                 {workStatus === 'refreshing' ? (
+                 {indexStatus === 'refreshing' ? (
                     <Loader2 size={48} className="animate-spin mb-4" />
                  ) : (
                     <Terminal size={64} className="mb-4" />
                  )}
                  <p className="text-sm tracking-[0.4em] font-bold uppercase">
-                   {workStatus === 'refreshing'
+                   {indexStatus === 'refreshing'
                      ? 'Scanning file system'
+                     : indexStatus === 'pending'
+                       ? 'Index initialization pending'
                      : showWaiting
                        ? 'Waiting for input'
                        : showSearching

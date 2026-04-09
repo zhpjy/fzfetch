@@ -23,14 +23,16 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
   - 支持从环境变量读取刷新 TTL、空闲 TTL、清理周期与 TopK。
 - `src/cache.rs`
   - 负责 `data/` 与 `cache.txt` 的创建。
-  - 负责缓存文件读写与原子替换。
+  - 负责缓存记录读写与原子替换。
 - `src/scanner.rs`
   - 全盘扫描根目录，只收集常规文件。
-  - 使用 `HashSet` 做新增/删除差异比对。
+  - 同时采集路径对应的 `size_bytes`。
+  - 使用记录级差异比对驱动索引更新。
 - `src/search.rs`
   - 对 `nucleo` 进行薄封装。
-  - 新增路径时走 injector 增量注入。
-  - 若存在删除路径，则 `restart(true)` 后整体重灌，保证删除生效。
+  - 新增记录时走 injector 增量注入。
+  - 查询阶段直接返回缓存中的 `size_bytes`，不再逐条 `stat` 文件。
+  - 若存在删除路径或元信息变化，则 `restart(true)` 后整体重灌，保证记录更新生效。
 - `src/state.rs`
   - 管理懒加载索引、后台刷新、空闲卸载与刷新广播。
   - 只常驻 `nucleo` 搜索索引，不再额外常驻一份完整路径 `HashSet<String>`。
@@ -81,19 +83,19 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 1. 用户第一次发起搜索。
 2. `IndexManager::ensure_loaded()` 读取 `data/cache.txt`。
-3. 所有路径注入 `nucleo` 内存索引。
+3. 所有缓存记录注入 `nucleo` 内存索引。
 4. 若缓存是启动时新建的空缓存，或者缓存 mtime 已超过 `refresh_ttl`，则异步触发后台刷新。
 
 ### 4.3 后台刷新
 
-1. `scan_root_files()` 遍历根目录收集所有文件绝对路径。
-2. `diff_paths()` 使用 `HashSet` 计算 `added` 与 `removed`。
+1. `scan_root_files()` 遍历根目录收集所有文件绝对路径，并采集 `size_bytes`。
+2. `diff_records()` 计算新增、删除与元信息变化。
 3. 将新快照覆盖写回 `data/cache.txt`。
 4. 更新内存索引：
-   - 后台刷新阶段临时读取 `cache.txt` 旧快照，和新扫描结果做 `HashSet` 差异比较。
+   - 后台刷新阶段临时读取 `cache.txt` 旧快照，和新扫描结果做记录级差异比较。
    - 若只有新增，则走 injector 增量注入。
-   - 若存在删除，则重建 `nucleo` 池并整体重灌。
-   - 差异计算所需的 `HashSet` 只在刷新阶段短暂存在，不作为运行时常驻状态保留。
+   - 若存在删除或元信息变化，则重建 `nucleo` 池并整体重灌。
+   - 差异计算所需的记录映射只在刷新阶段短暂存在，不作为运行时常驻状态保留。
 5. 向所有在线 WebSocket 客户端广播：
 
 ```json
@@ -106,6 +108,27 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 - 若距离最近一次使用超过 `idle_ttl`，且当前没有刷新任务正在执行，则将索引整体释放。
 - 下一次真正有搜索请求时再从 `data/cache.txt` 重新载入。
+
+### 4.5 cache.txt 记录格式
+
+当前 `cache.txt` 每行保存一条记录：
+
+```text
+<size_bytes or -><TAB><absolute_path>
+```
+
+示例：
+
+```text
+1234	/files/demo.txt
+-	/files/missing.txt
+```
+
+说明：
+
+- `1234` 表示缓存中记录的文件大小。
+- `-` 表示当前记录没有可用的大小信息。
+- 仍兼容旧格式的“纯路径行”；旧缓存在下一次刷新后会自动写成新格式。
 
 ## 5. WebSocket 搜索协议
 
