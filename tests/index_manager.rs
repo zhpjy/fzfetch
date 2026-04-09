@@ -21,7 +21,7 @@ fn build_config(root_dir: &Path, data_dir: PathBuf, cache_file: PathBuf) -> AppC
 }
 
 #[tokio::test]
-async fn ensure_loaded_builds_runtime_from_cache() {
+async fn ensure_loaded_builds_search_engine_from_cache() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("root");
     fs::create_dir_all(&root).unwrap();
@@ -50,11 +50,14 @@ async fn ensure_loaded_builds_runtime_from_cache() {
     let state = AppState::new(build_config(&root, data_dir, cache_file));
 
     let runtime = state.index_manager.ensure_loaded().await.unwrap();
-    let paths = runtime.paths.read().await.clone();
+    let mut engine = runtime.engine.lock().await;
+    let alpha_hits = engine.search("alpha", 10);
+    let beta_hits = engine.search("beta", 10);
 
-    assert_eq!(paths.len(), 2);
-    assert!(paths.contains(&alpha.to_string_lossy().to_string()));
-    assert!(paths.contains(&beta.to_string_lossy().to_string()));
+    assert_eq!(alpha_hits.len(), 1);
+    assert_eq!(alpha_hits[0].path, alpha.to_string_lossy());
+    assert_eq!(beta_hits.len(), 1);
+    assert_eq!(beta_hits[0].path, beta.to_string_lossy());
     assert!(state.index_manager.runtime.read().await.is_some());
 }
 
@@ -107,13 +110,8 @@ async fn refresh_due_uses_cache_mtime() {
         refresh_result.is_err(),
         "refresh should not run while cache mtime is fresh"
     );
-    assert!(
-        !runtime
-            .paths
-            .read()
-            .await
-            .contains(&unseen.to_string_lossy().to_string())
-    );
+    let cache_contents = fs::read_to_string(&state.config.cache_file).unwrap();
+    assert!(!cache_contents.contains(&unseen.to_string_lossy().to_string()));
 }
 
 #[tokio::test]
@@ -146,20 +144,19 @@ async fn refresh_success_updates_last_refresh_at_from_cache_mtime() {
 
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
-        if runtime
-            .paths
-            .read()
-            .await
-            .contains(&fresh.to_string_lossy().to_string())
-        {
+        let hits = state.index_manager.search("fresh").await.unwrap();
+        if hits.iter().any(|hit| hit.path == fresh.to_string_lossy()) {
             break;
         }
         assert!(
             Instant::now() < deadline,
-            "refresh did not update runtime paths"
+            "refresh did not update search runtime"
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+
+    let cache_contents = fs::read_to_string(&cache_file).unwrap();
+    assert!(cache_contents.contains(&fresh.to_string_lossy().to_string()));
 
     let cache_mtime = fs::metadata(&cache_file).unwrap().modified().unwrap();
     let last_refresh_at = *runtime.last_refresh_at.lock().await;
@@ -184,7 +181,7 @@ async fn first_use_refreshes_when_cache_was_just_created() {
     config.force_initial_refresh = true;
 
     let state = AppState::new(config);
-    let runtime = state.index_manager.ensure_loaded().await.unwrap();
+    let _runtime = state.index_manager.ensure_loaded().await.unwrap();
     let mut refresh_rx = state.refresh_tx.subscribe();
 
     let hits = state.index_manager.search("fresh").await.unwrap();
@@ -198,12 +195,8 @@ async fn first_use_refreshes_when_cache_was_just_created() {
 
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
-        if runtime
-            .paths
-            .read()
-            .await
-            .contains(&fresh.to_string_lossy().to_string())
-        {
+        let hits = state.index_manager.search("fresh").await.unwrap();
+        if hits.iter().any(|hit| hit.path == fresh.to_string_lossy()) {
             break;
         }
         assert!(
@@ -212,4 +205,7 @@ async fn first_use_refreshes_when_cache_was_just_created() {
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+
+    let cache_contents = fs::read_to_string(&state.config.cache_file).unwrap();
+    assert!(cache_contents.contains(&fresh.to_string_lossy().to_string()));
 }

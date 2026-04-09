@@ -33,6 +33,7 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
   - 若存在删除路径，则 `restart(true)` 后整体重灌，保证删除生效。
 - `src/state.rs`
   - 管理懒加载索引、后台刷新、空闲卸载与刷新广播。
+  - 只常驻 `nucleo` 搜索索引，不再额外常驻一份完整路径 `HashSet<String>`。
 - `src/ws.rs`
   - 处理 WebSocket 搜索。
   - 使用 `AtomicU64` 做同连接最新请求纪元拦截。
@@ -89,8 +90,10 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 2. `diff_paths()` 使用 `HashSet` 计算 `added` 与 `removed`。
 3. 将新快照覆盖写回 `data/cache.txt`。
 4. 更新内存索引：
+   - 后台刷新阶段临时读取 `cache.txt` 旧快照，和新扫描结果做 `HashSet` 差异比较。
    - 若只有新增，则走 injector 增量注入。
    - 若存在删除，则重建 `nucleo` 池并整体重灌。
+   - 差异计算所需的 `HashSet` 只在刷新阶段短暂存在，不作为运行时常驻状态保留。
 5. 向所有在线 WebSocket 客户端广播：
 
 ```json

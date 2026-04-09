@@ -1,9 +1,11 @@
 use std::collections::HashSet;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use fzfetch::cache::{
-    CacheLayoutStatus, ensure_cache_layout, load_cache_paths, write_cache_snapshot,
+    CacheLayoutStatus, ensure_cache_layout, load_cache_paths, load_cache_paths_from_reader,
+    write_cache_snapshot,
 };
 use fzfetch::scanner::{diff_paths, scan_root_files};
 
@@ -65,7 +67,10 @@ fn from_env_honors_root_and_data_dir_overrides() {
 
     assert_eq!(config.root_dir, root);
     assert_eq!(config.data_dir, data_dir);
-    assert_eq!(config.cache_file, PathBuf::from("/tmp/fzfetch-data/cache.txt"));
+    assert_eq!(
+        config.cache_file,
+        PathBuf::from("/tmp/fzfetch-data/cache.txt")
+    );
 
     unsafe {
         std::env::remove_var("FZFETCH_ROOT");
@@ -151,6 +156,16 @@ fn load_cache_paths_ignores_empty_lines() {
     std::fs::write(&cache_file, "\n/tmp/a\n\n   \n/tmp/b\n").unwrap();
 
     let paths = load_cache_paths(&cache_file).unwrap();
+
+    let expected = HashSet::from([String::from("/tmp/a"), String::from("/tmp/b")]);
+    assert_eq!(paths, expected);
+}
+
+#[test]
+fn load_cache_paths_from_reader_ignores_empty_lines() {
+    let reader = Cursor::new("\n/tmp/a\n\n   \n/tmp/b\n");
+
+    let paths = load_cache_paths_from_reader(reader).unwrap();
 
     let expected = HashSet::from([String::from("/tmp/a"), String::from("/tmp/b")]);
     assert_eq!(paths, expected);

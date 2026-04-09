@@ -35,7 +35,6 @@ impl AppState {
 }
 
 pub struct IndexRuntime {
-    pub paths: RwLock<HashSet<String>>,
     pub engine: Mutex<SearchEngine>,
     pub last_used_at: Mutex<Instant>,
     pub last_refresh_at: Mutex<SystemTime>,
@@ -90,16 +89,16 @@ impl IndexManager {
         );
         let cache_status = ensure_cache_layout(&self.config.data_dir, &self.config.cache_file)?;
         let paths = load_cache_paths(&self.config.cache_file)?;
+        let path_count = paths.len();
 
         let mut engine = SearchEngine::new();
-        engine.seed(paths.iter().cloned());
+        engine.seed(paths);
 
         let last_refresh_at = std::fs::metadata(&self.config.cache_file)
             .and_then(|meta| meta.modified())
             .unwrap_or(UNIX_EPOCH);
 
         let runtime = Arc::new(IndexRuntime {
-            paths: RwLock::new(paths),
             engine: Mutex::new(engine),
             last_used_at: Mutex::new(Instant::now()),
             last_refresh_at: Mutex::new(last_refresh_at),
@@ -108,7 +107,6 @@ impl IndexManager {
                 self.config.force_initial_refresh || cache_status == CacheLayoutStatus::Created,
             ),
         });
-        let path_count = runtime.paths.read().await.len();
 
         tracing::info!(
             cache_file = %self.config.cache_file.display(),
@@ -231,9 +229,9 @@ impl IndexManager {
                     root_dir = %config.canonical_root_dir.display(),
                     "background index refresh started"
                 );
-                let old_paths = runtime.paths.read().await.clone();
                 let config_for_scan = config.clone();
                 let blocking_output = task::spawn_blocking(move || -> anyhow::Result<_> {
+                    let old_paths = load_cache_paths(&config_for_scan.cache_file)?;
                     let new_paths = scan_root_files(&config_for_scan.canonical_root_dir)?;
                     let diff = diff_paths(&old_paths, &new_paths);
                     write_cache_snapshot(&config_for_scan.cache_file, &new_paths)?;
@@ -263,17 +261,10 @@ impl IndexManager {
                         &blocking_output.diff.removed,
                     );
                 }
-
-                {
-                    let mut paths = runtime.paths.write().await;
-                    *paths = blocking_output.new_paths;
-                }
-
                 *runtime.last_refresh_at.lock().await = blocking_output.refreshed_cache_mtime;
-                let path_count = runtime.paths.read().await.len();
                 tracing::info!(
                     cache_file = %config.cache_file.display(),
-                    path_count,
+                    path_count = blocking_output.new_paths.len(),
                     "cache snapshot updated after refresh"
                 );
                 runtime

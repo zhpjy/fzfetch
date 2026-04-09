@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -28,13 +29,20 @@ pub fn ensure_cache_layout(
 }
 
 pub fn load_cache_paths(cache_file: &Path) -> anyhow::Result<HashSet<String>> {
-    let content = fs::read_to_string(cache_file)?;
-    Ok(content
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(ToOwned::to_owned)
-        .collect())
+    let file = fs::File::open(cache_file)?;
+    load_cache_paths_from_reader(BufReader::new(file))
+}
+
+pub fn load_cache_paths_from_reader<R: BufRead>(reader: R) -> anyhow::Result<HashSet<String>> {
+    let mut paths = HashSet::new();
+    for line in reader.lines() {
+        let line = line?;
+        let trimmed = line.trim();
+        if !trimmed.is_empty() {
+            paths.insert(trimmed.to_owned());
+        }
+    }
+    Ok(paths)
 }
 
 pub fn write_cache_snapshot(cache_file: &Path, paths: &HashSet<String>) -> anyhow::Result<()> {
