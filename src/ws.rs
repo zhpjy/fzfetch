@@ -12,8 +12,6 @@ use tokio::task::JoinSet;
 use crate::search::SearchHit;
 use crate::state::{AppState, IndexStatus};
 
-const INDEX_REFRESHED_EVENT: &str = r#"{"type":"INDEX_REFRESHED"}"#;
-
 #[derive(Debug, Deserialize)]
 pub struct SearchRequest {
     pub req_id: u64,
@@ -54,8 +52,8 @@ pub fn should_drop_response(latest_req_id: &AtomicU64, req_id: u64) -> bool {
     latest_req_id.load(Ordering::Acquire) != req_id
 }
 
-fn refresh_notification_message(_payload: String) -> Message {
-    Message::Text(INDEX_REFRESHED_EVENT.into())
+fn broadcast_message(payload: String) -> Message {
+    Message::Text(payload.into())
 }
 
 fn index_status_message(status: IndexStatus) -> Message {
@@ -137,7 +135,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 match refresh_result {
                     Ok(payload) => {
                         tracing::debug!(payload = %payload, "websocket refresh broadcast queued");
-                        if outbound_tx.send(refresh_notification_message(payload)).await.is_err() {
+                        if outbound_tx.send(broadcast_message(payload)).await.is_err() {
                             break;
                         }
                     }
@@ -230,7 +228,9 @@ mod tests {
 
     use crate::state::IndexStatus;
 
-    use super::{assert_stale_epoch_is_dropped, index_status_message, refresh_notification_message};
+    use super::{
+        assert_stale_epoch_is_dropped, broadcast_message, index_status_message,
+    };
 
     #[test]
     fn stale_epoch_is_dropped() {
@@ -238,12 +238,22 @@ mod tests {
     }
 
     #[test]
-    fn refresh_notification_uses_fixed_payload() {
-        let message = refresh_notification_message("{\"type\":\"OTHER\"}".to_string());
+    fn broadcast_message_preserves_refresh_event_payload() {
+        let message = broadcast_message("{\"type\":\"INDEX_REFRESHED\"}".to_string());
 
         assert_eq!(
             message,
             Message::Text("{\"type\":\"INDEX_REFRESHED\"}".into())
+        );
+    }
+
+    #[test]
+    fn broadcast_message_preserves_index_status_payload() {
+        let message = broadcast_message("{\"type\":\"INDEX_STATUS\",\"state\":\"ready\"}".to_string());
+
+        assert_eq!(
+            message,
+            Message::Text("{\"type\":\"INDEX_STATUS\",\"state\":\"ready\"}".into())
         );
     }
 
