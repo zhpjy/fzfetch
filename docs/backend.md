@@ -19,13 +19,14 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
   - 注册 WebSocket 搜索接口与下载接口。
   - 启动空闲索引清理循环。
 - `src/config.rs`
-  - `AppConfig` 统一管理根目录、`data/cache.txt`、TTL、清理周期、TopK。
+  - `AppConfig` 统一管理根目录、排除目录、`data/cache.txt`、TTL、清理周期、TopK。
   - 支持从环境变量读取刷新 TTL、空闲 TTL、清理周期与 TopK。
 - `src/cache.rs`
   - 负责 `data/` 与 `cache.txt` 的创建。
   - 负责缓存记录读写与原子替换。
 - `src/scanner.rs`
   - 全盘扫描根目录，只收集常规文件。
+  - 支持剪枝跳过被排除目录及其整个子树。
   - 同时采集路径对应的 `size_bytes`。
   - 使用记录级差异比对驱动索引更新。
 - `src/search.rs`
@@ -52,6 +53,11 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 - `FZFETCH_DATA_DIR`
   - 应用状态目录，当前用于放置缓存文件。
   - 默认值：当前工作目录下的 `data`。
+- `FZFETCH_EXCLUDE_DIRS`
+  - 用逗号分隔的相对目录列表。
+  - 每一项都相对 `FZFETCH_ROOT` 解析。
+  - 命中的目录及其所有子目录中的文件都不会进入索引。
+  - 默认值：空。
 - `FZFETCH_REFRESH_TTL_SECS`
   - 缓存过期秒数，过期后用户下一次搜索会触发后台刷新。
   - 默认值：`86400`。
@@ -69,6 +75,7 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 - `cache.txt` 路径固定为 `FZFETCH_DATA_DIR/cache.txt`，默认即 `data/cache.txt`。
 - 启动时若 `FZFETCH_ROOT` 或 `FZFETCH_DATA_DIR` 不存在，进程会自动创建目录。
+- `FZFETCH_EXCLUDE_DIRS` 支持不存在的目录；如果后续该目录出现，扫描时仍会被跳过。
 - 若服务启动时发现 `cache.txt` 是新创建的空文件，则首次用户搜索会立即触发一次后台刷新，不会等到 24 小时后。
 
 ## 4. 索引生命周期
@@ -89,6 +96,7 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 ### 4.3 后台刷新
 
 1. `scan_root_files()` 遍历根目录收集所有文件绝对路径，并采集 `size_bytes`。
+   对于配置在 `FZFETCH_EXCLUDE_DIRS` 中的目录，会直接跳过整棵子树。
 2. `diff_records()` 计算新增、删除与元信息变化。
 3. 将新快照覆盖写回 `data/cache.txt`。
 4. 更新内存索引：

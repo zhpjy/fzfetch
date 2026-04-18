@@ -264,7 +264,10 @@ impl IndexManager {
                 let config_for_scan = config.clone();
                 let blocking_output = task::spawn_blocking(move || -> anyhow::Result<_> {
                     let old_records = load_cache_records(&config_for_scan.cache_file)?;
-                    let new_records = scan_root_files(&config_for_scan.canonical_root_dir)?;
+                    let new_records = scan_root_files(
+                        &config_for_scan.canonical_root_dir,
+                        &config_for_scan.canonical_exclude_dirs,
+                    )?;
                     let diff = diff_records(&old_records, &new_records);
                     write_cache_snapshot(&config_for_scan.cache_file, &new_records)?;
                     let refreshed_cache_mtime = cache_mtime(&config_for_scan.cache_file)?;

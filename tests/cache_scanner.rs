@@ -79,6 +79,33 @@ fn from_env_honors_root_and_data_dir_overrides() {
 }
 
 #[test]
+fn from_env_parses_exclude_dirs_and_ignores_empty_items() {
+    let _guard = env_lock().lock().unwrap();
+    unsafe {
+        std::env::set_var("FZFETCH_ROOT", "/tmp/fzfetch-root");
+        std::env::remove_var("FZFETCH_DATA_DIR");
+        std::env::set_var("FZFETCH_EXCLUDE_DIRS", "tmp, nested/cache , ,logs");
+    }
+
+    let config = fzfetch::config::AppConfig::from_env().unwrap();
+
+    assert_eq!(
+        config.exclude_dirs,
+        vec![
+            PathBuf::from("tmp"),
+            PathBuf::from("nested/cache"),
+            PathBuf::from("logs"),
+        ]
+    );
+
+    unsafe {
+        std::env::remove_var("FZFETCH_ROOT");
+        std::env::remove_var("FZFETCH_DATA_DIR");
+        std::env::remove_var("FZFETCH_EXCLUDE_DIRS");
+    }
+}
+
+#[test]
 fn ensure_cache_layout_is_idempotent() {
     let temp = tempfile::tempdir().unwrap();
     let data_dir = temp.path().join("data");
@@ -303,7 +330,7 @@ fn scan_root_files_only_collects_regular_files() {
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(&nested_file, "3").unwrap();
 
-    let files = scan_root_files(root).unwrap();
+    let files = scan_root_files(root, &[]).unwrap();
 
     let expected = HashMap::from([
         (
@@ -370,7 +397,7 @@ fn scan_root_files_skips_invalid_utf8_paths_and_keeps_valid_ones() {
     let invalid_file = root.join(invalid_name);
     std::fs::write(&invalid_file, "bad").unwrap();
 
-    let files = scan_root_files(root).unwrap();
+    let files = scan_root_files(root, &[]).unwrap();
 
     let expected = HashMap::from([(
         valid_file
@@ -405,7 +432,7 @@ fn scan_root_files_continues_when_walkdir_hits_unreadable_dir() {
     std::fs::write(blocked_dir.join("hidden.txt"), "x").unwrap();
     std::fs::set_permissions(&blocked_dir, std::fs::Permissions::from_mode(0o000)).unwrap();
 
-    let files = scan_root_files(root);
+    let files = scan_root_files(root, &[]);
 
     std::fs::set_permissions(&blocked_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
 
@@ -420,4 +447,40 @@ fn scan_root_files_continues_when_walkdir_hits_unreadable_dir() {
                 .to_string()
         )
     );
+}
+
+#[test]
+fn scan_root_files_skips_excluded_directories_and_descendants() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let keep = root.join("keep.txt");
+    let excluded_dir = root.join("excluded");
+    let nested_dir = excluded_dir.join("deep");
+    let excluded_file = nested_dir.join("skip.txt");
+    let sibling_dir = root.join("sibling");
+    let sibling_file = sibling_dir.join("keep.log");
+
+    std::fs::write(&keep, "1").unwrap();
+    std::fs::create_dir_all(&nested_dir).unwrap();
+    std::fs::write(&excluded_file, "2").unwrap();
+    std::fs::create_dir_all(&sibling_dir).unwrap();
+    std::fs::write(&sibling_file, "3").unwrap();
+
+    let files = scan_root_files(root, &[excluded_dir]).unwrap();
+
+    assert!(files.contains_key(&keep.canonicalize().unwrap().to_string_lossy().to_string()));
+    assert!(files.contains_key(
+        &sibling_file
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .to_string()
+    ));
+    assert!(!files.contains_key(
+        &excluded_file
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .to_string()
+    ));
 }

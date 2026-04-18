@@ -75,6 +75,7 @@ npm --prefix frontend test
 | --- | --- | --- |
 | `FZFETCH_ROOT` | `files` | 需要建立索引的根目录 |
 | `FZFETCH_DATA_DIR` | `data` | 应用状态目录，缓存文件位于该目录下 |
+| `FZFETCH_EXCLUDE_DIRS` | 空 | 逗号分隔的相对目录列表，这些目录及其子目录不会进入索引 |
 | `FZFETCH_REFRESH_TTL_SECS` | `86400` | 缓存过期秒数，过期后下一次搜索会触发后台刷新 |
 | `FZFETCH_IDLE_TTL_SECS` | `1800` | 索引空闲秒数，超过后会从内存卸载 |
 | `FZFETCH_CLEANUP_INTERVAL_SECS` | `60` | 后台清理循环检查周期 |
@@ -85,6 +86,8 @@ npm --prefix frontend test
 - `cache.txt` 固定为 `FZFETCH_DATA_DIR/cache.txt`
 - 本地默认是 `data/cache.txt`
 - 容器默认是 `/data/cache.txt`
+- `FZFETCH_EXCLUDE_DIRS` 中的每一项都相对 `FZFETCH_ROOT` 解析，例如 `tmp,cache/private`
+- 被排除目录下的所有子目录和文件都会被一起跳过
 
 
 ## 更多信息

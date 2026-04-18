@@ -7,6 +7,8 @@ pub struct AppConfig {
     pub canonical_root_dir: PathBuf,
     pub data_dir: PathBuf,
     pub cache_file: PathBuf,
+    pub exclude_dirs: Vec<PathBuf>,
+    pub canonical_exclude_dirs: Vec<PathBuf>,
     pub refresh_ttl: Duration,
     pub idle_ttl: Duration,
     pub cleanup_interval: Duration,
@@ -23,6 +25,8 @@ impl AppConfig {
             canonical_root_dir,
             data_dir: PathBuf::from("data"),
             cache_file: PathBuf::from("data/cache.txt"),
+            exclude_dirs: Vec::new(),
+            canonical_exclude_dirs: Vec::new(),
             refresh_ttl: Duration::from_secs(24 * 60 * 60),
             idle_ttl: Duration::from_secs(30 * 60),
             cleanup_interval: Duration::from_secs(60),
@@ -37,12 +41,14 @@ impl AppConfig {
         let mut config = Self::default_for(root_dir.into());
         config.data_dir = PathBuf::from(data_dir);
         config.cache_file = config.data_dir.join("cache.txt");
+        config.exclude_dirs = parse_path_list_env("FZFETCH_EXCLUDE_DIRS")?;
         config.refresh_ttl =
             Duration::from_secs(parse_u64_env("FZFETCH_REFRESH_TTL_SECS", 24 * 60 * 60)?);
         config.idle_ttl = Duration::from_secs(parse_u64_env("FZFETCH_IDLE_TTL_SECS", 30 * 60)?);
         config.cleanup_interval =
             Duration::from_secs(parse_u64_env("FZFETCH_CLEANUP_INTERVAL_SECS", 60)?);
         config.top_k = parse_usize_env("FZFETCH_TOP_K", 100)?;
+        config.refresh_canonical_exclude_dirs();
         Ok(config)
     }
 
@@ -55,7 +61,13 @@ impl AppConfig {
 
     pub fn canonicalize_root_dir(&mut self) -> anyhow::Result<()> {
         self.canonical_root_dir = std::fs::canonicalize(&self.root_dir)?;
+        self.refresh_canonical_exclude_dirs();
         Ok(())
+    }
+
+    fn refresh_canonical_exclude_dirs(&mut self) {
+        self.canonical_exclude_dirs =
+            resolve_exclude_dirs(&self.canonical_root_dir, &self.exclude_dirs);
     }
 }
 
@@ -77,6 +89,21 @@ fn parse_usize_env(name: &str, default: usize) -> anyhow::Result<usize> {
     parse_usize_value(name, value, default)
 }
 
+fn parse_path_list_env(name: &str) -> anyhow::Result<Vec<PathBuf>> {
+    let value = match std::env::var(name) {
+        Ok(value) => value,
+        Err(std::env::VarError::NotPresent) => return Ok(Vec::new()),
+        Err(error) => return Err(anyhow::anyhow!("failed to read {name}: {error}")),
+    };
+
+    Ok(value
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(PathBuf::from)
+        .collect())
+}
+
 fn parse_u64_value(name: &str, value: Option<String>, default: u64) -> anyhow::Result<u64> {
     match value {
         Some(value) => value
@@ -95,9 +122,40 @@ fn parse_usize_value(name: &str, value: Option<String>, default: usize) -> anyho
     }
 }
 
+fn resolve_exclude_dirs(root_dir: &std::path::Path, exclude_dirs: &[PathBuf]) -> Vec<PathBuf> {
+    exclude_dirs
+        .iter()
+        .filter_map(|path| resolve_relative_dir(root_dir, path))
+        .collect()
+}
+
+fn resolve_relative_dir(root_dir: &std::path::Path, path: &std::path::Path) -> Option<PathBuf> {
+    let mut relative = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(part) => relative.push(part),
+            std::path::Component::ParentDir => {
+                if !relative.pop() {
+                    return None;
+                }
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => return None,
+        }
+    }
+
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    Some(root_dir.join(relative))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{parse_u64_value, parse_usize_value};
+    use std::path::{Path, PathBuf};
+
+    use super::{parse_u64_value, parse_usize_value, resolve_exclude_dirs};
 
     #[test]
     fn parse_u64_value_falls_back_to_default_when_missing() {
@@ -116,5 +174,15 @@ mod tests {
         let result = parse_usize_value("FZFETCH_TEST", Some("256".to_string()), 42);
 
         assert_eq!(result.unwrap(), 256);
+    }
+
+    #[test]
+    fn resolve_exclude_dirs_ignores_paths_outside_root() {
+        let resolved = resolve_exclude_dirs(
+            Path::new("/tmp/root"),
+            &[PathBuf::from("../outside"), PathBuf::from("inside")],
+        );
+
+        assert_eq!(resolved, vec![PathBuf::from("/tmp/root/inside")]);
     }
 }

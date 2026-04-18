@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::cache::FileRecord;
 
@@ -8,13 +8,25 @@ pub struct IndexDiff {
     pub removed: Vec<String>,
 }
 
-pub fn scan_root_files(root_dir: &Path) -> anyhow::Result<HashMap<String, FileRecord>> {
+pub fn scan_root_files(
+    root_dir: &Path,
+    excluded_dirs: &[PathBuf],
+) -> anyhow::Result<HashMap<String, FileRecord>> {
     let mut files = HashMap::new();
-    for entry in walkdir::WalkDir::new(root_dir) {
+    let mut walker = walkdir::WalkDir::new(root_dir).into_iter();
+    while let Some(entry) = walker.next() {
         let entry = match entry {
             Ok(entry) => entry,
             Err(_) => continue,
         };
+        if entry.file_type().is_dir()
+            && excluded_dirs
+                .iter()
+                .any(|excluded_dir| entry.path().starts_with(excluded_dir))
+        {
+            walker.skip_current_dir();
+            continue;
+        }
         if entry.file_type().is_file() {
             let abs = match entry.path().canonicalize() {
                 Ok(path) => path,

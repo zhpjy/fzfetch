@@ -3,6 +3,10 @@ services:
     image: ghcr.io/zhpjy/fzfetch
     ports:
       - "3000:3000"
+    environment:
+      # 逗号分隔的目录列表；每一项都相对容器内的 /files 解析。
+      # 下面这个示例会跳过 /files/tmp 和 /files/cache/private 及其所有子目录。
+      FZFETCH_EXCLUDE_DIRS: "tmp,cache/private"
     volumes:
       - ./your-folder1:/files/your-folder1
       - ./your-folder2:/files/your-folder2
