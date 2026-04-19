@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SearchHit } from '../types';
+import { basenameFromPath } from '../pathDisplay';
 import { useI18n } from '../i18n/useI18n';
 
 export function useDownload(onGhostFound: (path: string) => void) {
@@ -60,12 +61,14 @@ export function useDownload(onGhostFound: (path: string) => void) {
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const fileName = item.path.split('/').pop() || 'download';
+      const fileName = basenameFromPath(item.path);
       a.href = url;
-      a.download = fileName;
+      a.download = fileName || 'download';
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 0);
       document.body.removeChild(a);
 
       showToast(t('toast.downloadStarted', { name: fileName }), 'success');

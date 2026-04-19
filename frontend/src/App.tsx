@@ -3,8 +3,10 @@ import { Search, Terminal, Download, FileText, AlertCircle, CheckCircle2, X, Loa
 import { useSearchSocket } from './hooks/useSearchSocket';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useDownload } from './hooks/useDownload';
+import { useMeasuredPathDisplay } from './hooks/useMeasuredPathDisplay';
 import { StatusIndicator } from './components/StatusIndicator';
 import { FuzzyHighlight } from './components/FuzzyHighlight';
+import { basenameFromPath } from './pathDisplay';
 import { useI18n } from './i18n/useI18n';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -57,8 +59,9 @@ export default function App() {
   }, [setResults]);
 
   const { handleDownload, downloadingPath, toast, setToast } = useDownload(onGhostFound);
+  const { probeRef, getDisplayedPath } = useMeasuredPathDisplay();
 
-  const { selectedIndex } = useKeyboardNavigation(results, handleDownload, () => {
+  const { selectedIndex, setSelectedIndex } = useKeyboardNavigation(results, handleDownload, () => {
     setQuery('');
     inputRef.current?.focus();
   });
@@ -88,7 +91,6 @@ export default function App() {
             : showNoMatches
               ? t('empty.noMatches')
               : t('empty.waiting');
-
   return (
     <div className="h-screen bg-zinc-950 text-zinc-300 font-mono flex flex-col items-center select-none overflow-hidden">
       
@@ -168,6 +170,44 @@ export default function App() {
                <div className="h-full bg-emerald-500 w-1/3 animate-shimmer" />
             </div>
           )}
+
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-0 overflow-hidden opacity-0"
+          >
+            <div className="px-3 py-2 sm:px-5 sm:py-2.5 lg:px-7 flex items-start justify-between gap-3 border-l-2 border-l-transparent">
+              <div className="flex flex-1 items-start gap-2.5 sm:gap-3.5 min-w-0">
+                <div className="flex-shrink-0">
+                  <FileText size={14} className="sm:hidden" />
+                  <FileText size={16} className="hidden sm:block" />
+                </div>
+                <div
+                  data-testid="path-width-probe-container"
+                  className="flex flex-1 flex-col min-w-0"
+                >
+                  <div className="truncate text-[13px] leading-4 sm:text-sm sm:leading-4">
+                    probe.txt
+                  </div>
+                  <div
+                    ref={probeRef}
+                    data-testid="path-width-probe"
+                    className="w-full truncate text-[9px] leading-3 sm:text-[10px] text-zinc-500 italic mt-0.5 font-sans opacity-70"
+                  >
+                    /path/width/probe.txt
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end justify-center gap-1 pt-0.5 sm:flex-row sm:items-center sm:gap-3.5 flex-shrink-0">
+                <div className="min-w-0 text-right text-[10px] sm:min-w-14 sm:text-[11px] font-semibold tabular-nums text-zinc-500">
+                  0 B
+                </div>
+                <div className="w-5 sm:w-8 flex justify-center">
+                  <Download size={14} className="sm:hidden" />
+                  <Download size={16} className="hidden sm:block" />
+                </div>
+              </div>
+            </div>
+          </div>
           
           <div
             data-testid="results-scroll-area"
@@ -175,21 +215,27 @@ export default function App() {
           >
             {results.length > 0 ? (
               <div className="divide-y divide-zinc-800/50">
-                {results.map((item, index) => (
+                {results.map((item, index) => {
+                  const basename = basenameFromPath(item.path);
+                  const isSelected = selectedIndex === index;
+                  const displayedPath = getDisplayedPath(item.path, isSelected);
+
+                  return (
                   <div
                     key={item.path}
                     id={`item-${index}`}
-                    onClick={() => handleDownload(item)}
+                    data-testid={`result-row-${index}`}
+                    onClick={() => setSelectedIndex(index)}
                     className={cn(
-                      "px-3 py-2 sm:px-5 sm:py-2.5 lg:px-7 cursor-pointer flex items-center justify-between gap-3 group transition-all border-l-2",
-                      selectedIndex === index 
+                      "px-3 py-2 sm:px-5 sm:py-2.5 lg:px-7 cursor-pointer flex items-start justify-between gap-3 group transition-all border-l-2",
+                      isSelected
                         ? 'border-l-emerald-500 bg-emerald-500/5'
                         : 'border-l-transparent hover:bg-zinc-800/30'
                     )}
                   >
-                    <div className="flex flex-1 items-center gap-2.5 sm:gap-3.5 min-w-0">
+                    <div className="flex flex-1 items-start gap-2.5 sm:gap-3.5 min-w-0">
                       <div className="flex-shrink-0">
-                        {selectedIndex === index ? (
+                        {isSelected ? (
                           <>
                             <span className="text-emerald-500 font-bold tracking-widest text-xs sm:hidden">&gt;</span>
                             <span className="hidden sm:block text-emerald-500 font-bold tracking-widest text-xs">&gt;</span>
@@ -201,29 +247,50 @@ export default function App() {
                           </>
                         )}
                       </div>
-                      <div className="flex flex-col min-w-0">
-                        <div className={cn(
-                          "truncate text-[13px] leading-4 sm:text-sm sm:leading-4",
-                          selectedIndex === index ? 'text-zinc-50 font-semibold' : 'text-zinc-300'
+                      <div className="flex flex-1 flex-col min-w-0">
+                        <div
+                          data-testid={`result-name-${index}`}
+                          className={cn(
+                          "text-[13px] leading-4 sm:text-sm sm:leading-4",
+                          isSelected
+                            ? 'whitespace-normal break-all text-zinc-50 font-semibold'
+                            : 'truncate text-zinc-300'
                         )}>
-                          <FuzzyHighlight text={item.path.split('/').pop() || ''} query={query} />
+                          <FuzzyHighlight text={basename} query={query} />
                         </div>
-                        <div className="truncate text-[9px] leading-3 sm:text-[10px] text-zinc-500 italic mt-0.5 font-sans opacity-70">
-                          <FuzzyHighlight text={item.path} query={query} />
+                        <div
+                          data-testid={`result-path-${index}`}
+                          title={item.path}
+                          className={cn(
+                            "w-full text-[9px] leading-3 sm:text-[10px] mt-0.5 font-sans",
+                            isSelected
+                              ? 'whitespace-normal break-all text-zinc-400 opacity-90'
+                              : 'truncate text-zinc-500 italic opacity-70'
+                          )}
+                        >
+                          {displayedPath}
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end justify-center gap-1 sm:flex-row sm:items-center sm:gap-3.5 flex-shrink-0">
+                    <div className="flex flex-col items-end justify-center gap-1 pt-0.5 sm:flex-row sm:items-center sm:gap-3.5 flex-shrink-0">
                       <div className="min-w-0 text-right text-[10px] sm:min-w-14 sm:text-[11px] font-semibold tabular-nums text-zinc-500">
                         {formatFileSize(item.size_bytes)}
                       </div>
-                      <div className="w-5 sm:w-8 flex justify-center">
+                      <button
+                        type="button"
+                        aria-label={`下载 ${basenameFromPath(item.path)}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDownload(item);
+                        }}
+                        className="w-5 sm:w-8 flex justify-center"
+                      >
                         {downloadingPath === item.path ? (
                           <Loader2 size={14} className="text-emerald-500 animate-spin sm:hidden" />
                         ) : (
                           <Download size={14} className={cn(
                             "sm:hidden transition-all duration-200",
-                            selectedIndex === index ? 'opacity-100 text-emerald-500' : 'opacity-40 group-hover:opacity-60 sm:opacity-0 sm:group-hover:opacity-30'
+                            isSelected ? 'opacity-100 text-emerald-500' : 'opacity-40 group-hover:opacity-60 sm:opacity-0 sm:group-hover:opacity-30'
                           )} />
                         )}
                         {downloadingPath === item.path ? (
@@ -231,13 +298,14 @@ export default function App() {
                         ) : (
                           <Download size={16} className={cn(
                             "hidden sm:block transition-all duration-200",
-                            selectedIndex === index ? 'opacity-100 text-emerald-500' : 'opacity-0 group-hover:opacity-30'
+                            isSelected ? 'opacity-100 text-emerald-500' : 'opacity-0 group-hover:opacity-30'
                           )} />
                         )}
-                      </div>
+                      </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center opacity-10">

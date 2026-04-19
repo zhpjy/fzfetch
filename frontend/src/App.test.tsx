@@ -1,5 +1,5 @@
 import React from 'react';
-import { screen, fireEvent, act } from '@testing-library/react';
+import { screen, fireEvent, act, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCALE_STORAGE_KEY } from './i18n/types';
 import { renderWithI18n } from './test/renderWithI18n';
@@ -17,9 +17,67 @@ const kbNavState = vi.hoisted(() => ({
   lastOnEscape: undefined as undefined | (() => void),
 }));
 
+const downloadState = vi.hoisted(() => ({
+  handleDownload: vi.fn(),
+}));
+
+const resizeObserverState = vi.hoisted(() => ({
+  probeWidth: 42,
+}));
+
+const canvasMeasureState = vi.hoisted(() => ({
+  charWidth: 1,
+}));
+
 const statusIndicatorState = vi.hoisted(() => ({
   lastProps: null as null | Record<string, unknown>,
 }));
+
+class ResizeObserverMock {
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+
+  observe(target: Element) {
+    this.callback(
+      [
+        {
+          target,
+          contentRect: {
+            width: resizeObserverState.probeWidth,
+            height: 0,
+            x: 0,
+            y: 0,
+            top: 0,
+            right: resizeObserverState.probeWidth,
+            bottom: 0,
+            left: 0,
+            toJSON: () => ({}),
+          },
+        } as ResizeObserverEntry,
+      ],
+      this as unknown as ResizeObserver,
+    );
+  }
+
+  unobserve() {}
+
+  disconnect() {}
+}
+
+vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+  configurable: true,
+  value: vi.fn(() => ({
+    font: '',
+    measureText: (text: string) => ({
+      width: text.length * canvasMeasureState.charWidth,
+    }),
+  })),
+});
 
 vi.mock('./hooks/useSearchSocket', async () => {
   const React = await import('react');
@@ -44,7 +102,7 @@ vi.mock('./hooks/useSearchSocket', async () => {
 vi.mock('./hooks/useDownload', () => {
   return {
     useDownload: () => ({
-      handleDownload: vi.fn(),
+      handleDownload: downloadState.handleDownload,
       downloadingPath: null,
       toast: null,
       setToast: vi.fn(),
@@ -52,11 +110,13 @@ vi.mock('./hooks/useDownload', () => {
   };
 });
 
-vi.mock('./hooks/useKeyboardNavigation', () => {
+vi.mock('./hooks/useKeyboardNavigation', async () => {
+  const React = await import('react');
   return {
     useKeyboardNavigation: (_results: unknown[], _onDownload: unknown, onEscape?: () => void) => {
       kbNavState.lastOnEscape = onEscape;
-      return { selectedIndex: 0 };
+      const [selectedIndex, setSelectedIndex] = React.useState(0);
+      return { selectedIndex, setSelectedIndex };
     },
   };
 });
@@ -79,6 +139,9 @@ function renderApp(initialLocale?: 'en' | 'zh-CN') {
 
 describe('App', () => {
   beforeEach(() => {
+    resizeObserverState.probeWidth = 42;
+    canvasMeasureState.charWidth = 1;
+    downloadState.handleDownload = vi.fn();
     searchSocketState.connectionStatus = 'ready';
     searchSocketState.indexStatus = 'ready';
     searchSocketState.workStatus = 'idle';
@@ -184,6 +247,16 @@ describe('App', () => {
     expect(scrollArea).not.toContainElement(footerHints);
   });
 
+  it('uses a full-width hidden probe so path measurement matches the real text column', () => {
+    searchSocketState.initialQuery = 'abc';
+    searchSocketState.initialResults = [{ path: '/tmp/demo.txt', score: 1, size_bytes: 1536 }];
+
+    renderApp();
+
+    expect(screen.getByTestId('path-width-probe-container').className).toContain('flex-1');
+    expect(screen.getByTestId('path-width-probe').className).toContain('w-full');
+  });
+
   it('shows file size to the left of the download icon', () => {
     searchSocketState.initialQuery = 'demo';
     searchSocketState.initialResults = [{ path: '/tmp/demo.txt', score: 1, size_bytes: 1536 }];
@@ -191,5 +264,140 @@ describe('App', () => {
     renderApp();
 
     expect(screen.getByText('1.5 KB')).toBeInTheDocument();
+  });
+
+  it('selects a row on click without triggering download', () => {
+    const handleDownload = vi.fn();
+    searchSocketState.connectionStatus = 'ready';
+    searchSocketState.indexStatus = 'ready';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = 'report';
+    searchSocketState.initialResults = [
+      { path: '/tmp/alpha/report-a.txt', score: 1, size_bytes: 10 },
+      { path: '/tmp/beta/report-b.txt', score: 2, size_bytes: 20 },
+    ];
+    downloadState.handleDownload = handleDownload;
+
+    renderApp();
+
+    fireEvent.click(screen.getByTestId('result-row-1'));
+
+    expect(handleDownload).not.toHaveBeenCalled();
+    expect(screen.getByTestId('result-row-1').className).toContain('border-l-emerald-500');
+  });
+
+  it('downloads only from the explicit action button', () => {
+    const handleDownload = vi.fn();
+    searchSocketState.connectionStatus = 'ready';
+    searchSocketState.indexStatus = 'ready';
+    searchSocketState.workStatus = 'idle';
+    searchSocketState.isSearching = false;
+    searchSocketState.initialQuery = 'report';
+    searchSocketState.initialResults = [
+      { path: '/tmp/alpha/report-a.txt', score: 1, size_bytes: 10 },
+    ];
+    downloadState.handleDownload = handleDownload;
+
+    renderApp();
+
+    fireEvent.click(screen.getByRole('button', { name: '下载 report-a.txt' }));
+
+    expect(handleDownload).toHaveBeenCalledTimes(1);
+    expect(handleDownload).toHaveBeenCalledWith(searchSocketState.initialResults[0]);
+  });
+
+  it('reuses the existing filename and path lines when a row is selected', () => {
+    resizeObserverState.probeWidth = 28;
+    searchSocketState.initialQuery = 'report';
+    searchSocketState.initialResults = [
+      {
+        path: '/workspace/alpha/with/a/really/long/path/segment/report-a.txt',
+        score: 1,
+        size_bytes: 10,
+      },
+      {
+        path: '/workspace/beta/with/a/really/long/path/segment/report-b.txt',
+        score: 2,
+        size_bytes: 20,
+      },
+    ];
+
+    renderApp();
+    fireEvent.click(screen.getByTestId('result-row-1'));
+
+    const selectedRow = screen.getByTestId('result-row-1');
+    const unselectedRow = screen.getByTestId('result-row-0');
+    const selectedName = screen.getByTestId('result-name-1');
+    const unselectedName = screen.getByTestId('result-name-0');
+    const selectedPath = screen.getByTestId('result-path-1');
+    const unselectedPath = screen.getByTestId('result-path-0');
+
+    expect(screen.queryByTestId('selected-item-details')).not.toBeInTheDocument();
+    expect(selectedPath).toHaveTextContent('/workspace/beta/with/a/really/long/path/segment/report-b.txt');
+    expect(selectedPath.className).toContain('whitespace-normal');
+    expect(selectedPath.className).not.toContain('truncate');
+    expect(unselectedPath.textContent).toContain('...');
+    expect(unselectedPath.className).toContain('truncate');
+    expect(selectedName.className).toContain('whitespace-normal');
+    expect(selectedName.className).not.toContain('truncate');
+    expect(unselectedName.className).toContain('truncate');
+    expect(within(selectedRow).queryByText('/workspace/beta/with/a/really/long/path/segment/report-b.txt')).toBe(selectedPath);
+    expect(within(unselectedRow).queryByText('/workspace/alpha/with/a/really/long/path/segment/report-a.txt')).not.toBeInTheDocument();
+  });
+
+  it('shows the full unselected path when the measured width is wide enough', () => {
+    resizeObserverState.probeWidth = 120;
+    searchSocketState.initialQuery = 'report';
+    searchSocketState.initialResults = [
+      {
+        path: '/tmp/selected-report.txt',
+        score: 0,
+        size_bytes: 1,
+      },
+      {
+        path: '/very/long/workspace/frontend/src/components/report-item.tsx',
+        score: 1,
+        size_bytes: 10,
+      },
+    ];
+
+    renderApp();
+
+    const displayedPath = screen.getByTestId('result-path-1');
+
+    expect(displayedPath).toHaveAttribute(
+      'title',
+      '/very/long/workspace/frontend/src/components/report-item.tsx',
+    );
+    expect(displayedPath).toHaveTextContent('/very/long/workspace/frontend/src/components/report-item.tsx');
+    expect(displayedPath.textContent).not.toContain('...');
+  });
+
+  it('shortens unselected paths only when the measured width is too small', () => {
+    resizeObserverState.probeWidth = 28;
+    searchSocketState.initialQuery = 'report';
+    searchSocketState.initialResults = [
+      {
+        path: '/tmp/selected-report.txt',
+        score: 0,
+        size_bytes: 1,
+      },
+      {
+        path: '/very/long/workspace/frontend/src/components/report-item.tsx',
+        score: 1,
+        size_bytes: 10,
+      },
+    ];
+
+    renderApp();
+
+    const displayedPath = screen.getByTestId('result-path-1');
+
+    expect(displayedPath).toHaveAttribute(
+      'title',
+      '/very/long/workspace/frontend/src/components/report-item.tsx',
+    );
+    expect(displayedPath.textContent).toContain('...');
   });
 });
