@@ -34,6 +34,8 @@ function formatFileSize(sizeBytes?: number | null) {
   return `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
+const GITHUB_REPO_URL = 'https://github.com/zhpjy/fzfetch';
+
 export default function App() {
   const { locale, setLocale, t } = useI18n();
 
@@ -92,10 +94,16 @@ export default function App() {
       
       {/* Header / Status Bar */}
       <div className="w-full max-w-5xl px-3 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pt-10 flex justify-between items-end mb-4 sm:mb-6">
-        <div className="flex items-center gap-4">
+        <a
+          href={GITHUB_REPO_URL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open fzfetch on GitHub"
+          className="flex items-center gap-4 rounded-md transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+        >
           <Terminal className="text-emerald-500" size={28} />
           <h1 className="text-2xl font-bold tracking-tighter text-zinc-100">FZFETCH</h1>
-        </div>
+        </a>
         
         <div className="flex items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1 text-[10px] font-semibold tracking-wider text-zinc-400">

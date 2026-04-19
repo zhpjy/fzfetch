@@ -159,6 +159,16 @@ describe('App', () => {
     expect('onRefresh' in (statusIndicatorState.lastProps ?? {})).toBe(false);
   });
 
+  it('links the brand area to the GitHub repository in a new tab', () => {
+    renderApp();
+
+    const brandLink = screen.getByRole('link', { name: 'Open fzfetch on GitHub' });
+
+    expect(brandLink).toHaveAttribute('href', 'https://github.com/zhpjy/fzfetch');
+    expect(brandLink).toHaveAttribute('target', '_blank');
+    expect(brandLink).toHaveAttribute('rel', 'noreferrer');
+  });
+
   it('renders a dedicated scroll area and keeps footer hints outside it', () => {
     searchSocketState.initialQuery = 'abc';
     searchSocketState.initialResults = [{ path: '/tmp/demo.txt', score: 1, size_bytes: 1536 }];
