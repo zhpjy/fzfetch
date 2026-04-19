@@ -5,6 +5,7 @@ import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useDownload } from './hooks/useDownload';
 import { StatusIndicator } from './components/StatusIndicator';
 import { FuzzyHighlight } from './components/FuzzyHighlight';
+import { useI18n } from './i18n/useI18n';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -34,6 +35,8 @@ function formatFileSize(sizeBytes?: number | null) {
 }
 
 export default function App() {
+  const { locale, setLocale, t } = useI18n();
+
   const {
     query,
     setQuery,
@@ -67,6 +70,22 @@ export default function App() {
     !isSearching &&
     results.length === 0;
   const showSearching = !showWaiting && isSearching && results.length === 0;
+  const switchToChineseLabel = t('locale.switchToChinese');
+  const switchToEnglishLabel = t('locale.switchToEnglish');
+  const zhCurrentLabel = locale === 'zh-CN' ? '中文（当前语言）' : 'Chinese (current language)';
+  const enCurrentLabel = locale === 'zh-CN' ? '英文（当前语言）' : 'English (current language)';
+  const emptyStateMessage =
+    indexStatus === 'refreshing'
+      ? t('empty.indexRefreshing')
+      : indexStatus === 'pending'
+        ? t('empty.indexPending')
+        : showWaiting
+          ? t('empty.waiting')
+          : showSearching
+            ? t('empty.searching')
+            : showNoMatches
+              ? t('empty.noMatches')
+              : t('empty.waiting');
 
   return (
     <div className="h-screen bg-zinc-950 text-zinc-300 font-mono flex flex-col items-center select-none overflow-hidden">
@@ -78,11 +97,40 @@ export default function App() {
           <h1 className="text-2xl font-bold tracking-tighter text-zinc-100">FZFETCH</h1>
         </div>
         
-        <StatusIndicator 
-          connectionStatus={connectionStatus}
-          indexStatus={indexStatus}
-          workStatus={workStatus}
-        />
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1 text-[10px] font-semibold tracking-wider text-zinc-400">
+            <button
+              type="button"
+              onClick={() => setLocale('zh-CN')}
+              aria-label={locale === 'zh-CN' ? zhCurrentLabel : switchToChineseLabel}
+              aria-pressed={locale === 'zh-CN'}
+              className={cn(
+                'rounded px-2 py-1 transition-colors',
+                locale === 'zh-CN' ? 'bg-zinc-100 text-zinc-900' : 'hover:text-zinc-200',
+              )}
+            >
+              {t('locale.labelChinese')}
+            </button>
+            <span className="text-zinc-600">/</span>
+            <button
+              type="button"
+              onClick={() => setLocale('en')}
+              aria-label={locale === 'en' ? enCurrentLabel : switchToEnglishLabel}
+              aria-pressed={locale === 'en'}
+              className={cn(
+                'rounded px-2 py-1 transition-colors',
+                locale === 'en' ? 'bg-zinc-100 text-zinc-900' : 'hover:text-zinc-200',
+              )}
+            >
+              {t('locale.labelEnglish')}
+            </button>
+          </div>
+          <StatusIndicator 
+            connectionStatus={connectionStatus}
+            indexStatus={indexStatus}
+            workStatus={workStatus}
+          />
+        </div>
       </div>
 
       {/* Main Search Area */}
@@ -95,7 +143,7 @@ export default function App() {
           ref={inputRef}
           autoFocus
           type="text"
-          placeholder="输入关键词进行实时模糊搜索..."
+          placeholder={t('search.placeholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="w-full bg-zinc-900 border border-zinc-800 outline-none rounded-xl py-4 sm:py-5 pl-11 sm:pl-14 lg:pl-16 pr-4 sm:pr-6 lg:pr-8 text-base sm:text-lg lg:text-xl shadow-2xl focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 text-zinc-100 transition-all placeholder:text-zinc-700"
@@ -191,17 +239,7 @@ export default function App() {
                     <Terminal size={64} className="mb-4" />
                  )}
                  <p className="text-sm tracking-[0.4em] font-bold uppercase">
-                   {indexStatus === 'refreshing'
-                     ? 'Scanning file system'
-                     : indexStatus === 'pending'
-                       ? 'Index initialization pending'
-                     : showWaiting
-                       ? 'Waiting for input'
-                       : showSearching
-                         ? 'Searching'
-                         : showNoMatches
-                           ? 'No matches found'
-                           : 'Waiting for input'}
+                   {emptyStateMessage}
                  </p>
               </div>
             )}
@@ -217,17 +255,17 @@ export default function App() {
         <div className="flex gap-4 sm:gap-8">
           <span className="flex items-center gap-2">
             <kbd className="px-1.5 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-100">↑↓</kbd>
-            Select Item
+            {t('hint.selectItem')}
           </span>
           <span className="flex items-center gap-2">
             <kbd className="px-1.5 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-100">Enter</kbd>
-            Download
+            {t('hint.download')}
           </span>
         </div>
         <div className="flex items-center gap-6">
           <span className="flex items-center gap-2">
             <kbd className="px-1.5 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-100">Esc</kbd>
-            Clear
+            {t('hint.clear')}
           </span>
         </div>
       </div>
@@ -244,7 +282,13 @@ export default function App() {
         >
           {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
           <span className="text-sm font-bold tracking-tight">{toast.msg}</span>
-          <button onClick={() => setToast(null)} className="ml-4 opacity-50 hover:opacity-100 transition-opacity">
+          <button
+            type="button"
+            aria-label={t('toast.dismiss')}
+            title={t('toast.dismiss')}
+            onClick={() => setToast(null)}
+            className="ml-4 opacity-50 hover:opacity-100 transition-opacity"
+          >
             <X size={16} />
           </button>
         </div>
