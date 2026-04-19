@@ -113,12 +113,18 @@ describe('useDownload', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(onGhostFound).not.toHaveBeenCalled();
     expect(createObjectURL).toHaveBeenCalledTimes(1);
-    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
     expect(click).toHaveBeenCalledTimes(1);
     expect(appendChild).toHaveBeenCalled();
     expect(removeChild).toHaveBeenCalled();
 
     expect(h.getLatest().toast?.type).toBe('success');
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock');
   });
 
   it('shows an error toast for non-410 failures', async () => {
@@ -233,5 +239,40 @@ describe('useDownload', () => {
     // React warns via console.error on setState after unmount.
     expect(consoleError).not.toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+
+  it('uses the basename helper for windows-like download names', async () => {
+    const onGhostFound = vi.fn<(path: string) => void>();
+    const blob = new Blob(['hello'], { type: 'text/plain' });
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      blob: async () => blob,
+    })) as unknown as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
+
+    const createObjectURL = vi.fn(() => 'blob:mock');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL } as unknown as typeof URL);
+
+    const clickedAnchors: HTMLAnchorElement[] = [];
+    const origCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      const el = origCreateElement(tagName);
+      if (tagName === 'a') {
+        Object.defineProperty(el, 'click', { value: vi.fn() });
+        clickedAnchors.push(el as HTMLAnchorElement);
+      }
+      return el;
+    });
+
+    const h = renderHookHarness(onGhostFound);
+    await h.flush();
+
+    await act(async () => {
+      await h.getLatest().handleDownload({ path: 'C:\\tmp\\report.pdf', score: 1 });
+    });
+
+    expect(clickedAnchors[0]?.download).toBe('report.pdf');
   });
 });

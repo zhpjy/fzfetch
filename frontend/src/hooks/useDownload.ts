@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SearchHit } from '../types';
+import { basenameFromPath } from '../pathDisplay';
 
 export function useDownload(onGhostFound: (path: string) => void) {
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
@@ -58,14 +59,17 @@ export function useDownload(onGhostFound: (path: string) => void) {
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+      const fileName = basenameFromPath(item.path);
       a.href = url;
-      a.download = item.path.split('/').pop() || 'download';
+      a.download = fileName || 'download';
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 0);
       document.body.removeChild(a);
       
-      showToast(`已开始下载: ${item.path.split('/').pop()}`, 'success');
+      showToast(`已开始下载: ${fileName}`, 'success');
     } catch (err) {
       console.error(err);
       if (mountedRef.current) showToast('下载失败', 'error');
