@@ -3,6 +3,7 @@ import { Database, Loader2 } from 'lucide-react';
 import { AppStatus, ConnectionStatus, IndexStatus, WorkStatus } from '../types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { useI18n } from '../i18n/useI18n';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -23,6 +24,8 @@ interface LegacyStatusIndicatorProps {
 type Props = StatusIndicatorProps | LegacyStatusIndicatorProps;
 
 export const StatusIndicator: React.FC<Props> = (props) => {
+  const { t } = useI18n();
+
   const connectionStatus: ConnectionStatus =
     'connectionStatus' in props
       ? props.connectionStatus
@@ -51,11 +54,11 @@ export const StatusIndicator: React.FC<Props> = (props) => {
   const getStatusConfig = () => {
     switch (connectionStatus) {
       case 'connecting':
-        return { label: '正在连接', color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
+        return { label: t('status.connecting'), color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
       case 'disconnected':
-        return { label: '未连接服务器', color: 'bg-red-500 shadow-[0_0_8px_#ef4444]' };
+        return { label: t('status.disconnected'), color: 'bg-red-500 shadow-[0_0_8px_#ef4444]' };
       case 'error':
-        return { label: '连接异常', color: 'bg-red-500 shadow-[0_0_8px_#ef4444]' };
+        return { label: t('status.error'), color: 'bg-red-500 shadow-[0_0_8px_#ef4444]' };
       case 'ready':
       default:
         break;
@@ -63,25 +66,25 @@ export const StatusIndicator: React.FC<Props> = (props) => {
 
     switch (indexStatus) {
       case 'pending':
-        return { label: '索引待初始化', color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
+        return { label: t('status.indexPending'), color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
       case 'refreshing':
-        return { label: '索引后台更新中', color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
+        return { label: t('status.indexRefreshing'), color: 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' };
       case 'unknown':
-        return { label: '索引状态未知', color: 'bg-zinc-500 shadow-[0_0_8px_#71717a]' };
+        return { label: t('status.indexUnknown'), color: 'bg-zinc-500 shadow-[0_0_8px_#71717a]' };
       default:
-        return { label: '索引就绪', color: 'bg-emerald-500 shadow-[0_0_8px_#10b981]' };
+        return { label: t('status.indexReady'), color: 'bg-emerald-500 shadow-[0_0_8px_#10b981]' };
     }
   };
 
   const getWorkLabel = () => {
     switch (workStatus) {
       case 'refreshing':
-        return 'SCANNING';
+        return t('work.scanning');
       case 'searching':
-        return 'SEARCHING';
+        return t('work.searching');
       case 'idle':
       default:
-        return 'IDLE';
+        return t('work.idle');
     }
   };
 

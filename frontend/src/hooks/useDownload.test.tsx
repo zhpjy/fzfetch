@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useDownload } from './useDownload';
 import { SearchHit } from '../types';
+import { I18nProvider } from '../i18n/I18nProvider';
+import { Locale } from '../i18n/types';
 
-function renderHookHarness(onGhostFound: (path: string) => void) {
+function renderHookHarness(onGhostFound: (path: string) => void, locale: Locale = 'en') {
   let latest: ReturnType<typeof useDownload> | null = null;
 
   function Harness(props: { onUpdate: (s: ReturnType<typeof useDownload>) => void }) {
@@ -16,7 +18,11 @@ function renderHookHarness(onGhostFound: (path: string) => void) {
     return null;
   }
 
-  const rendered = render(<Harness onUpdate={(s) => (latest = s)} />);
+  const rendered = render(
+    <I18nProvider initialLocale={locale}>
+      <Harness onUpdate={(s) => (latest = s)} />
+    </I18nProvider>
+  );
 
   return {
     getLatest: () => {
@@ -43,14 +49,14 @@ describe('useDownload', () => {
     vi.unstubAllGlobals();
   });
 
-  it('calls onGhostFound and shows a light hint when server returns 410', async () => {
+  it('calls onGhostFound and shows a localized light hint when server returns 410', async () => {
     const onGhostFound = vi.fn<(path: string) => void>();
     const fetchMock = vi.fn(async () => {
       return { ok: false, status: 410 } as unknown as Response;
     });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
-    const h = renderHookHarness(onGhostFound);
+    const h = renderHookHarness(onGhostFound, 'zh-CN');
     await h.flush();
 
     const item: SearchHit = { path: '/tmp/ghost.txt', score: 1 };
@@ -65,7 +71,7 @@ describe('useDownload', () => {
     // 410 should not be treated as a generic error; we want a light hint.
     expect(h.getLatest().toast).not.toBeNull();
     expect(h.getLatest().toast?.type).toBe('success');
-    expect(h.getLatest().toast?.msg).not.toBe('下载失败');
+    expect(h.getLatest().toast?.msg).toBe('文件已被移动或删除，已从结果中移除');
   });
 
   it('keeps existing behavior on success (starts download + success toast)', async () => {
@@ -101,7 +107,7 @@ describe('useDownload', () => {
       return el;
     });
 
-    const h = renderHookHarness(onGhostFound);
+    const h = renderHookHarness(onGhostFound, 'en');
     await h.flush();
 
     const item: SearchHit = { path: '/tmp/ok.txt', score: 1 };
@@ -118,6 +124,7 @@ describe('useDownload', () => {
     expect(removeChild).toHaveBeenCalled();
 
     expect(h.getLatest().toast?.type).toBe('success');
+    expect(h.getLatest().toast?.msg).toBe('Started download: ok.txt');
     expect(revokeObjectURL).not.toHaveBeenCalled();
 
     act(() => {
@@ -127,7 +134,7 @@ describe('useDownload', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock');
   });
 
-  it('shows an error toast for non-410 failures', async () => {
+  it('shows an English error toast for non-410 failures', async () => {
     const onGhostFound = vi.fn<(path: string) => void>();
     const fetchMock = vi.fn(async () => {
       return { ok: false, status: 500 } as unknown as Response;
@@ -135,7 +142,7 @@ describe('useDownload', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const h = renderHookHarness(onGhostFound);
+    const h = renderHookHarness(onGhostFound, 'en');
     await h.flush();
 
     const item: SearchHit = { path: '/tmp/fail.txt', score: 1 };
@@ -147,7 +154,7 @@ describe('useDownload', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(onGhostFound).not.toHaveBeenCalled();
     expect(h.getLatest().toast?.type).toBe('error');
-    expect(h.getLatest().toast?.msg).toBe('下载失败');
+    expect(h.getLatest().toast?.msg).toBe('Download failed');
     consoleError.mockRestore();
   });
 
