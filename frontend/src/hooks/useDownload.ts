@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { SearchHit } from '../types';
+import { useI18n } from '../i18n/useI18n';
 
 export function useDownload(onGhostFound: (path: string) => void) {
+  const { t } = useI18n();
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
@@ -45,7 +47,7 @@ export function useDownload(onGhostFound: (path: string) => void) {
 
       if (response.status === 410) {
         // 410 means the file is already gone; treat it as a soft hint and trigger cleanup.
-        showToast('文件已被移动或删除，已从结果中移除', 'success');
+        showToast(t('toast.fileGone'), 'success');
         onGhostFound(item.path);
         return;
       }
@@ -58,17 +60,18 @@ export function useDownload(onGhostFound: (path: string) => void) {
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+      const fileName = item.path.split('/').pop() || 'download';
       a.href = url;
-      a.download = item.path.split('/').pop() || 'download';
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
-      showToast(`已开始下载: ${item.path.split('/').pop()}`, 'success');
+
+      showToast(t('toast.downloadStarted', { name: fileName }), 'success');
     } catch (err) {
       console.error(err);
-      if (mountedRef.current) showToast('下载失败', 'error');
+      if (mountedRef.current) showToast(t('toast.downloadFailed'), 'error');
     } finally {
       inFlightRef.current = false;
       if (mountedRef.current) setDownloadingPath(null);

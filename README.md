@@ -1,16 +1,18 @@
 # fzfetch
 
-一个面向本地文件的高速模糊搜索工具。
+[中文说明](./README_zh.md)
 
-想找文件的时候，不想等，不想配一堆服务，也不想记复杂命令。`fzfetch` 的目标很简单：跑起来快，搜起来更快。
+The web version of fzf. A high-performance fuzzy search tool for local files.
 
-## 截图
+When you need to find a file, you usually do not want to wait, stand up extra services, or remember a pile of commands. `fzfetch` keeps the goal simple: start fast, search faster.
 
-![fzfetch 界面截图](./screenshot.jpg)
+## Screenshot
 
-## 快速上手
+![fzfetch UI screenshot](./screenshot.jpg)
 
-### Docker 启动
+## Quick Start
+
+### Run With Docker
 
 ```bash
 docker run --rm -p 3000:3000 \
@@ -21,75 +23,73 @@ docker run --rm -p 3000:3000 \
   ghcr.io/zhpjy/fzfetch:latest
 ```
 
-或者：
+Or:
 
 ```bash
 docker compose up -d
 ```
 
-### 本地启动
+### Run Locally
 
-先启动后端：
+Start the backend first:
 
 ```bash
 cargo run
 ```
 
-再启动前端开发服务器：
+Then start the frontend development server:
 
 ```bash
 npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
-默认会使用：
+By default, `fzfetch` uses:
 
-- `./files` 作为搜索目录
-- `./data` 作为缓存目录
-- `./data/cache.txt` 作为缓存文件
+- `./files` as the indexed root directory
+- `./data` as the application data directory
+- `./data/cache.txt` as the cache file
 
-这些目录如果不存在，`fzfetch` 会自动创建。
+If these directories do not exist, `fzfetch` creates them automatically.
 
+## Local Development
 
-## 本地开发
-
-常用命令如下：
+Common commands:
 
 ```bash
-# 后端
+# Backend
 cargo run
 cargo test
 
-# 前端
+# Frontend
 npm --prefix frontend install
 npm --prefix frontend run dev
 npm --prefix frontend run build
 npm --prefix frontend test
 ```
 
-后端默认监听 `0.0.0.0:3000`
+The backend listens on `0.0.0.0:3000` by default.
 
-## 配置项
+## Configuration
 
-| 变量 | 默认值 | 说明 |
+| Variable | Default | Description |
 | --- | --- | --- |
-| `FZFETCH_ROOT` | `files` | 需要建立索引的根目录 |
-| `FZFETCH_DATA_DIR` | `data` | 应用状态目录，缓存文件位于该目录下 |
-| `FZFETCH_EXCLUDE_DIRS` | 空 | 逗号分隔的相对目录列表，这些目录及其子目录不会进入索引 |
-| `FZFETCH_REFRESH_TTL_SECS` | `86400` | 缓存过期秒数，过期后下一次搜索会触发后台刷新 |
-| `FZFETCH_IDLE_TTL_SECS` | `1800` | 索引空闲秒数，超过后会从内存卸载 |
-| `FZFETCH_CLEANUP_INTERVAL_SECS` | `60` | 后台清理循环检查周期 |
-| `FZFETCH_TOP_K` | `100` | 单次搜索返回结果上限 |
+| `FZFETCH_ROOT` | `files` | Root directory to index |
+| `FZFETCH_DATA_DIR` | `data` | Application state directory that stores the cache file |
+| `FZFETCH_EXCLUDE_DIRS` | empty | Comma-separated relative directory list to exclude from indexing |
+| `FZFETCH_REFRESH_TTL_SECS` | `86400` | Cache expiration in seconds; the next search after expiry triggers a background refresh |
+| `FZFETCH_IDLE_TTL_SECS` | `1800` | Idle lifetime in seconds before the in-memory index is unloaded |
+| `FZFETCH_CLEANUP_INTERVAL_SECS` | `60` | Cleanup loop interval in seconds |
+| `FZFETCH_TOP_K` | `100` | Maximum number of results returned per search |
 
-补充说明：
+Notes:
 
-- `cache.txt` 固定为 `FZFETCH_DATA_DIR/cache.txt`
-- 本地默认是 `data/cache.txt`
-- 容器默认是 `/data/cache.txt`
-- `FZFETCH_EXCLUDE_DIRS` 中的每一项都相对 `FZFETCH_ROOT` 解析，例如 `tmp,cache/private`
-- 被排除目录下的所有子目录和文件都会被一起跳过
+- The cache file path is always `FZFETCH_DATA_DIR/cache.txt`
+- The local default is `data/cache.txt`
+- The container default is `/data/cache.txt`
+- Every entry in `FZFETCH_EXCLUDE_DIRS` is resolved relative to `FZFETCH_ROOT`, for example `tmp,cache/private`
+- Excluded directories and all of their descendants are skipped during indexing
 
-
-## 更多信息
+## More Information
 
 - [docs/backend.md](./docs/backend.md)
