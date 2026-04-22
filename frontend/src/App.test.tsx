@@ -209,14 +209,24 @@ describe('App', () => {
     const brandLink = screen.getByRole('link', { name: 'Open fzfetch on GitHub' });
     expect(brandLink.className).toContain('gap-2.5');
     expect(brandLink.className).toContain('sm:gap-4');
-    const terminalIcons = Array.from(brandLink.querySelectorAll('svg'));
-    const mobileTerminalIcons = terminalIcons.filter(icon => (icon.getAttribute('class') ?? '').includes('sm:hidden'));
-    const desktopTerminalIcons = terminalIcons.filter(icon => {
-      const className = icon.getAttribute('class') ?? '';
+    const terminalIconElements = Array.from(brandLink.querySelectorAll('[class]'));
+    const mobileIconWrapper = terminalIconElements.find(el => (el.getAttribute('class') ?? '').includes('sm:hidden'));
+    const desktopIconWrapper = terminalIconElements.find(el => {
+      const className = el.getAttribute('class') ?? '';
       return className.includes('hidden') && className.includes('sm:block');
     });
-    expect(mobileTerminalIcons).toHaveLength(1);
-    expect(desktopTerminalIcons).toHaveLength(1);
+    expect(mobileIconWrapper).toBeTruthy();
+    expect(desktopIconWrapper).toBeTruthy();
+    const mobileIconSvg = mobileIconWrapper?.tagName.toLowerCase() === 'svg'
+      ? mobileIconWrapper
+      : mobileIconWrapper?.querySelector('svg');
+    const desktopIconSvg = desktopIconWrapper?.tagName.toLowerCase() === 'svg'
+      ? desktopIconWrapper
+      : desktopIconWrapper?.querySelector('svg');
+    expect(mobileIconSvg).toHaveAttribute('width', '22');
+    expect(mobileIconSvg).toHaveAttribute('height', '22');
+    expect(desktopIconSvg).toHaveAttribute('width', '28');
+    expect(desktopIconSvg).toHaveAttribute('height', '28');
 
     const heading = screen.getByRole('heading', { name: 'FZFETCH' });
     expect(heading.className).toContain('text-xl');
@@ -228,6 +238,7 @@ describe('App', () => {
     const statusIndicator = screen.getByTestId('status-indicator');
     expect(header).toContainElement(statusIndicator);
     expect(brandLink).not.toContainElement(statusIndicator);
+    expect(statusIndicator.parentElement).toContainElement(localeSwitcher);
 
     expect(within(localeSwitcher).getByRole('button', { name: 'Switch to Chinese' })).toHaveAttribute('aria-pressed', 'false');
     expect(within(localeSwitcher).getByRole('button', { name: 'English (current language)' })).toHaveAttribute('aria-pressed', 'true');
