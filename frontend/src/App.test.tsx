@@ -209,10 +209,25 @@ describe('App', () => {
     const brandLink = screen.getByRole('link', { name: 'Open fzfetch on GitHub' });
     expect(brandLink.className).toContain('gap-2.5');
     expect(brandLink.className).toContain('sm:gap-4');
+    const terminalIcons = Array.from(brandLink.querySelectorAll('svg'));
+    const mobileTerminalIcons = terminalIcons.filter(icon => (icon.getAttribute('class') ?? '').includes('sm:hidden'));
+    const desktopTerminalIcons = terminalIcons.filter(icon => {
+      const className = icon.getAttribute('class') ?? '';
+      return className.includes('hidden') && className.includes('sm:block');
+    });
+    expect(mobileTerminalIcons).toHaveLength(1);
+    expect(desktopTerminalIcons).toHaveLength(1);
+
+    const heading = screen.getByRole('heading', { name: 'FZFETCH' });
+    expect(heading.className).toContain('text-xl');
+    expect(heading.className).toContain('sm:text-2xl');
 
     const localeSwitcher = screen.getByTestId('locale-switcher');
     expect(localeSwitcher.className).toContain('hidden');
     expect(localeSwitcher.className).toContain('sm:flex');
+    const statusIndicator = screen.getByTestId('status-indicator');
+    expect(header).toContainElement(statusIndicator);
+    expect(brandLink).not.toContainElement(statusIndicator);
 
     expect(within(localeSwitcher).getByRole('button', { name: 'Switch to Chinese' })).toHaveAttribute('aria-pressed', 'false');
     expect(within(localeSwitcher).getByRole('button', { name: 'English (current language)' })).toHaveAttribute('aria-pressed', 'true');
