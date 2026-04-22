@@ -90,7 +90,7 @@ export const StatusIndicator: React.FC<Props> = (props) => {
 
   const isBusy =
     workStatus !== 'idle' || connectionStatus === 'connecting' || indexStatus === 'refreshing';
-  const isMobileBusy = connectionStatus === 'connecting' || indexStatus === 'refreshing';
+  const isMobileBusy = connectionStatus === 'connecting' || (connectionStatus === 'ready' && indexStatus === 'refreshing');
 
   const statusConfig = getStatusConfig();
   const workLabel = getWorkLabel();
@@ -101,7 +101,7 @@ export const StatusIndicator: React.FC<Props> = (props) => {
         data-testid="status-indicator-mobile"
         role="status"
         aria-label={statusConfig.label}
-        className="flex items-center gap-2 text-[10px] sm:hidden"
+        className="flex items-center gap-2 text-[10px] px-2 py-1 rounded border border-zinc-800 bg-zinc-900 min-w-[96px] sm:hidden"
       >
         {isMobileBusy ? (
           <Loader2 size={14} className="animate-spin text-emerald-500" />

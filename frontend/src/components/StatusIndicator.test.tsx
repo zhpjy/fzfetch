@@ -138,6 +138,18 @@ describe('StatusIndicator', () => {
     expect(within(mobile).queryByText('Index refreshing')).not.toBeInTheDocument();
   });
 
+  it('shows dot instead of spinner when disconnected takes precedence over refreshing index on mobile', () => {
+    renderWithI18n(
+      <StatusIndicator connectionStatus="disconnected" indexStatus="refreshing" workStatus="refreshing" />,
+      { initialLocale: 'en' },
+    );
+
+    const mobile = screen.getByTestId('status-indicator-mobile');
+    expect(within(mobile).getByText('Disconnected')).toBeInTheDocument();
+    expect(mobile.querySelector('svg.lucide-loader-circle')).toBeNull();
+    expect(mobile.querySelector('span.h-2.w-2.rounded-full')).not.toBeNull();
+  });
+
   it('uses localized primary status for mobile aria label', () => {
     renderWithI18n(
       <StatusIndicator connectionStatus="ready" indexStatus="pending" workStatus="idle" />,
