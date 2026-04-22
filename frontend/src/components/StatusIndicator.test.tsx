@@ -164,4 +164,25 @@ describe('StatusIndicator', () => {
     expect(mobile).toHaveAttribute('role', 'status');
     expect(mobile).toHaveAttribute('aria-label', '索引待初始化');
   });
+
+  it('shows mobile loader when primary status is connecting', () => {
+    renderWithI18n(
+      <StatusIndicator connectionStatus="connecting" indexStatus="ready" workStatus="idle" />,
+      { initialLocale: 'en' },
+    );
+
+    const mobile = screen.getByTestId('status-indicator-mobile');
+    expect(within(mobile).getByText('Connecting')).toBeInTheDocument();
+    expect(mobile.querySelector('svg.lucide-loader-circle')).not.toBeNull();
+  });
+
+  it('maps legacy refreshing status to localized mobile primary status', () => {
+    renderWithI18n(
+      <StatusIndicator status="refreshing" isSearching={false} />,
+      { initialLocale: 'zh-CN' },
+    );
+
+    const mobile = screen.getByTestId('status-indicator-mobile');
+    expect(within(mobile).getByText('索引后台更新中')).toBeInTheDocument();
+  });
 });
