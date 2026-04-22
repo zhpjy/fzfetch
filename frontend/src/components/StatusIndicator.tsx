@@ -90,28 +90,46 @@ export const StatusIndicator: React.FC<Props> = (props) => {
 
   const isBusy =
     workStatus !== 'idle' || connectionStatus === 'connecting' || indexStatus === 'refreshing';
+  const isMobileBusy = connectionStatus === 'connecting' || (connectionStatus === 'ready' && indexStatus === 'refreshing');
 
   const statusConfig = getStatusConfig();
+  const workLabel = getWorkLabel();
 
   return (
-    <div className="flex items-center gap-6 text-[10px]">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 h-6">
-          {isBusy ? (
-            <Loader2 size={14} className="animate-spin text-emerald-500" />
-          ) : (
-            <Database size={14} className="text-zinc-600" />
-          )}
-          <span className={cn("font-bold tracking-widest", isBusy ? 'text-emerald-500' : 'opacity-40')}>
-            {getWorkLabel()}
-          </span>
-        </div>
+    <>
+      <div
+        data-testid="status-indicator-mobile"
+        role="status"
+        aria-label={statusConfig.label}
+        className="flex items-center gap-2 text-[10px] px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900 min-w-[96px] sm:hidden"
+      >
+        {isMobileBusy ? (
+          <Loader2 size={12} className="animate-spin text-emerald-500" />
+        ) : (
+          <span className={cn("h-2 w-2 rounded-full", statusConfig.color)} />
+        )}
+        <span className="uppercase font-bold opacity-80 tracking-tight whitespace-nowrap">{statusConfig.label}</span>
       </div>
 
-      <div className="flex items-center gap-2 px-2 py-1 rounded border border-zinc-800 bg-zinc-900 min-w-[120px]">
-        <span className={cn("h-2 w-2 rounded-full", statusConfig.color)} />
-        <span className="uppercase font-bold opacity-60 tracking-tight">{statusConfig.label}</span>
+      <div data-testid="status-indicator-desktop" className="hidden sm:flex items-center gap-6 text-[10px]">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 h-6">
+            {isBusy ? (
+              <Loader2 size={14} className="animate-spin text-emerald-500" />
+            ) : (
+              <Database size={14} className="text-zinc-600" />
+            )}
+            <span className={cn("font-bold tracking-widest", isBusy ? 'text-emerald-500' : 'opacity-40')}>
+              {workLabel}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 px-2 py-1 rounded border border-zinc-800 bg-zinc-900 min-w-[120px]">
+          <span className={cn("h-2 w-2 rounded-full", statusConfig.color)} />
+          <span className="uppercase font-bold opacity-60 tracking-tight">{statusConfig.label}</span>
+        </div>
       </div>
-    </div>
+    </>
   );
 };

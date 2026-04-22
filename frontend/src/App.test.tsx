@@ -126,7 +126,12 @@ vi.mock('./components/StatusIndicator', async () => {
   return {
     StatusIndicator: (props: Record<string, unknown>) => {
       statusIndicatorState.lastProps = props;
-      return React.createElement('div', { 'data-testid': 'status-indicator' });
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement('div', { 'data-testid': 'status-indicator', className: 'sm:hidden' }),
+        React.createElement('div', { 'data-testid': 'status-indicator-desktop-mock', className: 'hidden sm:flex' }),
+      );
     },
   };
 });
@@ -195,6 +200,59 @@ describe('App', () => {
     view.unmount();
     renderApp();
     expect(screen.getByPlaceholderText('输入关键词进行实时模糊搜索...')).toBeInTheDocument();
+  });
+
+  it('uses compact responsive header spacing and desktop-only locale switcher wrapper', () => {
+    renderApp('en');
+
+    const header = screen.getByTestId('app-header');
+    expect(header.className).toContain('pt-4');
+    expect(header.className).toContain('mb-3');
+    expect(header.className).toContain('items-center');
+    expect(header.className).toContain('sm:pt-8');
+    expect(header.className).toContain('sm:mb-6');
+    expect(header.className).toContain('sm:items-end');
+
+    const brandLink = screen.getByRole('link', { name: 'Open fzfetch on GitHub' });
+    expect(brandLink.className).toContain('gap-2.5');
+    expect(brandLink.className).toContain('sm:gap-4');
+    const terminalIconElements = Array.from(brandLink.querySelectorAll('[class]'));
+    const mobileIconWrapper = terminalIconElements.find(el => (el.getAttribute('class') ?? '').includes('sm:hidden'));
+    const desktopIconWrapper = terminalIconElements.find(el => {
+      const className = el.getAttribute('class') ?? '';
+      return className.includes('hidden') && className.includes('sm:block');
+    });
+    expect(mobileIconWrapper).toBeTruthy();
+    expect(desktopIconWrapper).toBeTruthy();
+    const mobileIconSvg = mobileIconWrapper?.tagName.toLowerCase() === 'svg'
+      ? mobileIconWrapper
+      : mobileIconWrapper?.querySelector('svg');
+    const desktopIconSvg = desktopIconWrapper?.tagName.toLowerCase() === 'svg'
+      ? desktopIconWrapper
+      : desktopIconWrapper?.querySelector('svg');
+    expect(mobileIconSvg).toHaveAttribute('width', '22');
+    expect(mobileIconSvg).toHaveAttribute('height', '22');
+    expect(desktopIconSvg).toHaveAttribute('width', '28');
+    expect(desktopIconSvg).toHaveAttribute('height', '28');
+
+    const heading = screen.getByRole('heading', { name: 'FZFETCH' });
+    expect(heading.className).toContain('text-xl');
+    expect(heading.className).toContain('sm:text-2xl');
+
+    const localeSwitcher = screen.getByTestId('locale-switcher');
+    expect(localeSwitcher.className).toContain('hidden');
+    expect(localeSwitcher.className).toContain('sm:flex');
+    const statusIndicator = screen.getByTestId('status-indicator');
+    const statusIndicatorDesktop = screen.getByTestId('status-indicator-desktop-mock');
+    expect(header).toContainElement(statusIndicator);
+    expect(header).toContainElement(statusIndicatorDesktop);
+    expect(brandLink).not.toContainElement(statusIndicator);
+    expect(brandLink).not.toContainElement(statusIndicatorDesktop);
+    expect(statusIndicator.parentElement).toContainElement(localeSwitcher);
+    expect(statusIndicator.parentElement).toContainElement(statusIndicatorDesktop);
+
+    expect(within(localeSwitcher).getByRole('button', { name: 'Switch to Chinese' })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(localeSwitcher).getByRole('button', { name: 'English (current language)' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('passes onEscape to useKeyboardNavigation and clears query when triggered', () => {
