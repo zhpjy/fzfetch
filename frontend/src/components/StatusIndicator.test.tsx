@@ -117,10 +117,13 @@ describe('StatusIndicator', () => {
     const desktop = screen.getByTestId('status-indicator-desktop');
 
     expect(mobile.className).toContain('sm:hidden');
+    expect(mobile.className).toContain('px-2.5');
     expect(desktop.className).toContain('hidden');
     expect(desktop.className).toContain('sm:flex');
 
-    expect(within(mobile).getByText('Index ready')).toBeInTheDocument();
+    const mobileLabel = within(mobile).getByText('Index ready');
+    expect(mobileLabel).toBeInTheDocument();
+    expect(mobileLabel.className).toContain('whitespace-nowrap');
     expect(within(mobile).queryByText('IDLE')).not.toBeInTheDocument();
 
     expect(within(desktop).getByText('Index ready')).toBeInTheDocument();
