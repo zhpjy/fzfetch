@@ -1,5 +1,5 @@
 import React from 'react';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { StatusIndicator } from './StatusIndicator';
@@ -12,8 +12,9 @@ describe('StatusIndicator', () => {
       { initialLocale: 'en' },
     );
 
-    expect(screen.getByText('Connecting')).toBeInTheDocument();
-    expect(screen.getByText('IDLE')).toBeInTheDocument();
+    const desktop = screen.getByTestId('status-indicator-desktop');
+    expect(within(desktop).getByText('Connecting')).toBeInTheDocument();
+    expect(within(desktop).getByText('IDLE')).toBeInTheDocument();
   });
 
   it('shows Chinese labels when locale is zh-CN', () => {
@@ -22,8 +23,9 @@ describe('StatusIndicator', () => {
       { initialLocale: 'zh-CN' },
     );
 
-    expect(screen.getByText('索引后台更新中')).toBeInTheDocument();
-    expect(screen.getByText('扫描中')).toBeInTheDocument();
+    const desktop = screen.getByTestId('status-indicator-desktop');
+    expect(within(desktop).getByText('索引后台更新中')).toBeInTheDocument();
+    expect(within(desktop).getByText('扫描中')).toBeInTheDocument();
   });
 
   it('shows localized disconnected label for modern props', () => {
@@ -32,7 +34,7 @@ describe('StatusIndicator', () => {
       { initialLocale: 'en' },
     );
 
-    expect(screen.getByText('Disconnected')).toBeInTheDocument();
+    expect(within(screen.getByTestId('status-indicator-desktop')).getByText('Disconnected')).toBeInTheDocument();
   });
 
   it('shows localized error label for modern props', () => {
@@ -41,7 +43,7 @@ describe('StatusIndicator', () => {
       { initialLocale: 'en' },
     );
 
-    expect(screen.getByText('Connection error')).toBeInTheDocument();
+    expect(within(screen.getByTestId('status-indicator-desktop')).getByText('Connection error')).toBeInTheDocument();
   });
 
   it('shows localized pending index label for modern props', () => {
@@ -50,7 +52,7 @@ describe('StatusIndicator', () => {
       { initialLocale: 'en' },
     );
 
-    expect(screen.getByText('Index pending')).toBeInTheDocument();
+    expect(within(screen.getByTestId('status-indicator-desktop')).getByText('Index pending')).toBeInTheDocument();
   });
 
   it('shows localized ready index label for modern props', () => {
@@ -59,7 +61,7 @@ describe('StatusIndicator', () => {
       { initialLocale: 'en' },
     );
 
-    expect(screen.getByText('Index ready')).toBeInTheDocument();
+    expect(within(screen.getByTestId('status-indicator-desktop')).getByText('Index ready')).toBeInTheDocument();
   });
 
   it('renders work status before index status', () => {
@@ -68,8 +70,9 @@ describe('StatusIndicator', () => {
       { initialLocale: 'en' },
     );
 
-    const workLabel = screen.getByText('IDLE');
-    const indexLabel = screen.getByText('Index ready');
+    const desktop = screen.getByTestId('status-indicator-desktop');
+    const workLabel = within(desktop).getByText('IDLE');
+    const indexLabel = within(desktop).getByText('Index ready');
 
     expect(workLabel.compareDocumentPosition(indexLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -80,7 +83,7 @@ describe('StatusIndicator', () => {
       { initialLocale: 'en' },
     );
 
-    expect(screen.getByText('SEARCHING')).toBeInTheDocument();
+    expect(within(screen.getByTestId('status-indicator-desktop')).getByText('SEARCHING')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /refresh/i })).toBeNull();
   });
 
@@ -90,8 +93,9 @@ describe('StatusIndicator', () => {
       { initialLocale: 'zh-CN' },
     );
 
-    expect(screen.getByText('索引后台更新中')).toBeInTheDocument();
-    expect(screen.getByText('扫描中')).toBeInTheDocument();
+    const desktop = screen.getByTestId('status-indicator-desktop');
+    expect(within(desktop).getByText('索引后台更新中')).toBeInTheDocument();
+    expect(within(desktop).getByText('扫描中')).toBeInTheDocument();
   });
 
   it('maps legacy disconnected status to localized disconnected label', () => {
@@ -100,6 +104,49 @@ describe('StatusIndicator', () => {
       { initialLocale: 'zh-CN' },
     );
 
-    expect(screen.getByText('未连接服务器')).toBeInTheDocument();
+    expect(within(screen.getByTestId('status-indicator-desktop')).getByText('未连接服务器')).toBeInTheDocument();
+  });
+
+  it('renders compact mobile summary and desktop full labels with responsive wrappers', () => {
+    renderWithI18n(
+      <StatusIndicator connectionStatus="ready" indexStatus="ready" workStatus="idle" />,
+      { initialLocale: 'en' },
+    );
+
+    const mobile = screen.getByTestId('status-indicator-mobile');
+    const desktop = screen.getByTestId('status-indicator-desktop');
+
+    expect(mobile.className).toContain('sm:hidden');
+    expect(desktop.className).toContain('hidden');
+    expect(desktop.className).toContain('sm:flex');
+
+    expect(within(mobile).getByText('Index ready')).toBeInTheDocument();
+    expect(within(mobile).queryByText('IDLE')).not.toBeInTheDocument();
+
+    expect(within(desktop).getByText('Index ready')).toBeInTheDocument();
+    expect(within(desktop).getByText('IDLE')).toBeInTheDocument();
+  });
+
+  it('prefers connection status over index status in mobile summary', () => {
+    renderWithI18n(
+      <StatusIndicator connectionStatus="disconnected" indexStatus="refreshing" workStatus="refreshing" />,
+      { initialLocale: 'en' },
+    );
+
+    const mobile = screen.getByTestId('status-indicator-mobile');
+    expect(within(mobile).getByText('Disconnected')).toBeInTheDocument();
+    expect(within(mobile).queryByText('Index refreshing')).not.toBeInTheDocument();
+  });
+
+  it('uses localized primary status for mobile aria label', () => {
+    renderWithI18n(
+      <StatusIndicator connectionStatus="ready" indexStatus="pending" workStatus="idle" />,
+      { initialLocale: 'zh-CN' },
+    );
+
+    const mobile = screen.getByTestId('status-indicator-mobile');
+    expect(within(mobile).getByText('索引待初始化')).toBeInTheDocument();
+    expect(mobile).toHaveAttribute('role', 'status');
+    expect(mobile).toHaveAttribute('aria-label', '索引待初始化');
   });
 });
