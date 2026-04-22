@@ -97,7 +97,7 @@ export default function App() {
       {/* Header / Status Bar */}
       <div
         data-testid="app-header"
-        className="w-full max-w-5xl px-3 pt-4 sm:px-6 sm:pt-8 lg:px-8 lg:pt-10 flex items-center justify-between gap-3 mb-3 sm:mb-6"
+        className="w-full max-w-5xl px-3 pt-4 sm:px-6 sm:pt-8 lg:px-8 lg:pt-10 flex items-center sm:items-end justify-between gap-3 mb-3 sm:mb-6"
       >
         <a
           href={GITHUB_REPO_URL}

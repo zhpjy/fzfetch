@@ -126,7 +126,12 @@ vi.mock('./components/StatusIndicator', async () => {
   return {
     StatusIndicator: (props: Record<string, unknown>) => {
       statusIndicatorState.lastProps = props;
-      return React.createElement('div', { 'data-testid': 'status-indicator' });
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement('div', { 'data-testid': 'status-indicator', className: 'sm:hidden' }),
+        React.createElement('div', { 'data-testid': 'status-indicator-desktop-mock', className: 'hidden sm:flex' }),
+      );
     },
   };
 });
@@ -203,8 +208,10 @@ describe('App', () => {
     const header = screen.getByTestId('app-header');
     expect(header.className).toContain('pt-4');
     expect(header.className).toContain('mb-3');
+    expect(header.className).toContain('items-center');
     expect(header.className).toContain('sm:pt-8');
     expect(header.className).toContain('sm:mb-6');
+    expect(header.className).toContain('sm:items-end');
 
     const brandLink = screen.getByRole('link', { name: 'Open fzfetch on GitHub' });
     expect(brandLink.className).toContain('gap-2.5');
@@ -236,9 +243,13 @@ describe('App', () => {
     expect(localeSwitcher.className).toContain('hidden');
     expect(localeSwitcher.className).toContain('sm:flex');
     const statusIndicator = screen.getByTestId('status-indicator');
+    const statusIndicatorDesktop = screen.getByTestId('status-indicator-desktop-mock');
     expect(header).toContainElement(statusIndicator);
+    expect(header).toContainElement(statusIndicatorDesktop);
     expect(brandLink).not.toContainElement(statusIndicator);
+    expect(brandLink).not.toContainElement(statusIndicatorDesktop);
     expect(statusIndicator.parentElement).toContainElement(localeSwitcher);
+    expect(statusIndicator.parentElement).toContainElement(statusIndicatorDesktop);
 
     expect(within(localeSwitcher).getByRole('button', { name: 'Switch to Chinese' })).toHaveAttribute('aria-pressed', 'false');
     expect(within(localeSwitcher).getByRole('button', { name: 'English (current language)' })).toHaveAttribute('aria-pressed', 'true');
