@@ -95,45 +95,54 @@ export default function App() {
     <div className="h-screen bg-zinc-950 text-zinc-300 font-mono flex flex-col items-center select-none overflow-hidden">
       
       {/* Header / Status Bar */}
-      <div className="w-full max-w-5xl px-3 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pt-10 flex justify-between items-end mb-4 sm:mb-6">
+      <div
+        data-testid="app-header"
+        className="w-full max-w-5xl px-3 pt-4 sm:px-6 sm:pt-8 lg:px-8 lg:pt-10 flex items-center justify-between gap-3 mb-3 sm:mb-6"
+      >
         <a
           href={GITHUB_REPO_URL}
           target="_blank"
           rel="noreferrer"
           aria-label="Open fzfetch on GitHub"
-          className="flex items-center gap-4 rounded-md transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+          className="flex min-w-0 items-center gap-2.5 sm:gap-4 rounded-md transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
         >
-          <Terminal className="text-emerald-500" size={28} />
-          <h1 className="text-2xl font-bold tracking-tighter text-zinc-100">FZFETCH</h1>
+          <Terminal className="text-emerald-500 sm:hidden" size={22} />
+          <Terminal className="hidden text-emerald-500 sm:block" size={28} />
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tighter text-zinc-100">FZFETCH</h1>
         </a>
         
         <div className="flex items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1 text-[10px] font-semibold tracking-wider text-zinc-400">
-            <button
-              type="button"
-              onClick={() => setLocale('zh-CN')}
-              aria-label={locale === 'zh-CN' ? zhCurrentLabel : switchToChineseLabel}
-              aria-pressed={locale === 'zh-CN'}
-              className={cn(
-                'rounded px-2 py-1 transition-colors',
-                locale === 'zh-CN' ? 'bg-zinc-100 text-zinc-900' : 'hover:text-zinc-200',
-              )}
-            >
-              {t('locale.labelChinese')}
-            </button>
-            <span className="text-zinc-600">/</span>
-            <button
-              type="button"
-              onClick={() => setLocale('en')}
-              aria-label={locale === 'en' ? enCurrentLabel : switchToEnglishLabel}
-              aria-pressed={locale === 'en'}
-              className={cn(
-                'rounded px-2 py-1 transition-colors',
-                locale === 'en' ? 'bg-zinc-100 text-zinc-900' : 'hover:text-zinc-200',
-              )}
-            >
-              {t('locale.labelEnglish')}
-            </button>
+          <div
+            data-testid="locale-switcher"
+            className="hidden sm:flex"
+          >
+            <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1 text-[10px] font-semibold tracking-wider text-zinc-400">
+              <button
+                type="button"
+                onClick={() => setLocale('zh-CN')}
+                aria-label={locale === 'zh-CN' ? zhCurrentLabel : switchToChineseLabel}
+                aria-pressed={locale === 'zh-CN'}
+                className={cn(
+                  'rounded px-2 py-1 transition-colors',
+                  locale === 'zh-CN' ? 'bg-zinc-100 text-zinc-900' : 'hover:text-zinc-200',
+                )}
+              >
+                {t('locale.labelChinese')}
+              </button>
+              <span className="text-zinc-600">/</span>
+              <button
+                type="button"
+                onClick={() => setLocale('en')}
+                aria-label={locale === 'en' ? enCurrentLabel : switchToEnglishLabel}
+                aria-pressed={locale === 'en'}
+                className={cn(
+                  'rounded px-2 py-1 transition-colors',
+                  locale === 'en' ? 'bg-zinc-100 text-zinc-900' : 'hover:text-zinc-200',
+                )}
+              >
+                {t('locale.labelEnglish')}
+              </button>
+            </div>
           </div>
           <StatusIndicator 
             connectionStatus={connectionStatus}

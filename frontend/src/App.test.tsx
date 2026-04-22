@@ -197,6 +197,27 @@ describe('App', () => {
     expect(screen.getByPlaceholderText('输入关键词进行实时模糊搜索...')).toBeInTheDocument();
   });
 
+  it('uses compact responsive header spacing and desktop-only locale switcher wrapper', () => {
+    renderApp('en');
+
+    const header = screen.getByTestId('app-header');
+    expect(header.className).toContain('pt-4');
+    expect(header.className).toContain('mb-3');
+    expect(header.className).toContain('sm:pt-8');
+    expect(header.className).toContain('sm:mb-6');
+
+    const brandLink = screen.getByRole('link', { name: 'Open fzfetch on GitHub' });
+    expect(brandLink.className).toContain('gap-2.5');
+    expect(brandLink.className).toContain('sm:gap-4');
+
+    const localeSwitcher = screen.getByTestId('locale-switcher');
+    expect(localeSwitcher.className).toContain('hidden');
+    expect(localeSwitcher.className).toContain('sm:flex');
+
+    expect(within(localeSwitcher).getByRole('button', { name: 'Switch to Chinese' })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(localeSwitcher).getByRole('button', { name: 'English (current language)' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('passes onEscape to useKeyboardNavigation and clears query when triggered', () => {
     renderApp();
 
