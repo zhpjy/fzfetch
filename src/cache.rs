@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -67,9 +67,6 @@ pub fn write_cache_snapshot(
         .ok_or_else(|| anyhow::anyhow!("cache file has no parent: {}", cache_file.display()))?;
     fs::create_dir_all(parent)?;
 
-    let mut sorted: Vec<(&Box<str>, &Option<u64>)> = records.iter().collect();
-    sorted.sort_by(|left, right| left.0.cmp(right.0));
-
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -83,18 +80,10 @@ pub fn write_cache_snapshot(
         ts
     ));
 
-    let mut output = String::new();
-    for (path, size_bytes) in sorted {
-        match size_bytes {
-            Some(size_bytes) => output.push_str(&size_bytes.to_string()),
-            None => output.push('-'),
-        }
-        output.push('\t');
-        output.push_str(path);
-        output.push('\n');
-    }
-
-    fs::write(&tmp_path, output)?;
+    let file = fs::File::create(&tmp_path)?;
+    let mut writer = BufWriter::new(file);
+    write_snapshot_lines(&mut writer, records)?;
+    writer.flush()?;
     fs::rename(&tmp_path, cache_file)?;
     Ok(())
 }
@@ -131,5 +120,41 @@ fn parse_cache_line(line: &str) -> anyhow::Result<(Box<str>, Option<u64>)> {
         Ok((path.to_string().into_boxed_str(), size_bytes))
     } else {
         Ok((line.to_string().into_boxed_str(), None))
+    }
+}
+
+fn write_snapshot_lines<W: Write>(writer: &mut W, records: &FileSnapshot) -> anyhow::Result<()> {
+    let mut sorted: Vec<(&Box<str>, &Option<u64>)> = records.iter().collect();
+    sorted.sort_by(|left, right| left.0.cmp(right.0));
+
+    for (path, size_bytes) in sorted {
+        match size_bytes {
+            Some(size_bytes) => write!(writer, "{size_bytes}")?,
+            None => writer.write_all(b"-")?,
+        }
+        writer.write_all(b"\t")?;
+        writer.write_all(path.as_bytes())?;
+        writer.write_all(b"\n")?;
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FileSnapshot, write_snapshot_lines};
+
+    #[test]
+    fn write_snapshot_lines_emits_sorted_cache_rows() {
+        let snapshot = FileSnapshot::from([
+            (Box::<str>::from("/z"), Some(9)),
+            (Box::<str>::from("/a"), Some(1)),
+            (Box::<str>::from("/m"), None),
+        ]);
+        let mut output = Vec::new();
+
+        write_snapshot_lines(&mut output, &snapshot).unwrap();
+
+        assert_eq!(String::from_utf8(output).unwrap(), "1\t/a\n-\t/m\n9\t/z\n");
     }
 }
