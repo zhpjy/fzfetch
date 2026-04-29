@@ -3,6 +3,7 @@ import { render, act } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useSearchSocket } from './useSearchSocket';
+import { I18nProvider } from '../i18n/I18nProvider';
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
@@ -56,7 +57,11 @@ function renderHookHarness() {
     return null;
   }
 
-  const rendered = render(<Harness onUpdate={(s) => (latest = s)} />);
+  const rendered = render(
+    <I18nProvider initialLocale="en">
+      <Harness onUpdate={(s) => (latest = s)} />
+    </I18nProvider>
+  );
 
   return {
     getLatest: () => {
@@ -168,6 +173,34 @@ describe('useSearchSocket', () => {
 
     expect(sent2.query).toBe('hello');
     expect(sent2.req_id).toBeGreaterThan(req1);
+    expect(h.getLatest().refreshToast).toEqual({
+      msg: 'Search results updated',
+      type: 'success',
+    });
+  });
+
+  it('clears refresh toast after a delay', async () => {
+    const h = renderHookHarness();
+
+    await h.flush();
+    const ws = MockWebSocket.instances[0]!;
+    act(() => ws.open());
+
+    act(() => h.getLatest().setQuery('hello'));
+    await h.flush();
+    act(() => vi.advanceTimersByTime(1000));
+    await h.flush();
+
+    act(() => ws.receive({ type: 'INDEX_REFRESHED' }));
+    await h.flush();
+    expect(h.getLatest().refreshToast).toEqual({
+      msg: 'Search results updated',
+      type: 'success',
+    });
+
+    act(() => vi.advanceTimersByTime(3000));
+    await h.flush();
+    expect(h.getLatest().refreshToast).toBeNull();
   });
 
   it('tracks backend index status pushed over websocket', async () => {

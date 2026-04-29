@@ -26,6 +26,7 @@ export const messageKeys = [
   'toast.downloadStarted',
   'toast.downloadFailed',
   'toast.fileGone',
+  'toast.searchResultsUpdated',
   'locale.switchToEnglish',
   'locale.switchToChinese',
   'locale.labelChinese',

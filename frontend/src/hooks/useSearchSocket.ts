@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ConnectionStatus, IndexStatus, SearchHit, SearchRequest, WorkStatus } from '../types';
+import { useI18n } from '../i18n/useI18n';
 
 const DEBOUNCE_MS = 100;
 const RECONNECT_MS = 1000;
+const TOAST_MS = 3000;
 
 function buildWsUrl() {
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -10,12 +12,14 @@ function buildWsUrl() {
 }
 
 export function useSearchSocket() {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchHit[]>([]);
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [indexStatus, setIndexStatus] = useState<IndexStatus>('unknown');
   const [workStatus, setWorkStatus] = useState<WorkStatus>('idle');
+  const [refreshToast, setRefreshToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const isSearching = workStatus !== 'idle';
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -25,8 +29,20 @@ export function useSearchSocket() {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduledQueryRef = useRef<string | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryRef = useRef('');
   queryRef.current = query;
+
+  const showRefreshToast = useCallback(() => {
+    setRefreshToast({ msg: t('toast.searchResultsUpdated'), type: 'success' });
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setRefreshToast(null);
+      toastTimerRef.current = null;
+    }, TOAST_MS);
+  }, [t]);
 
   const sendSearch = useCallback((q: string, nextWorkStatus: WorkStatus) => {
     const ws = wsRef.current;
@@ -74,7 +90,10 @@ export function useSearchSocket() {
         (msg as { type?: unknown }).type === 'INDEX_REFRESHED'
       ) {
         const current = queryRef.current.trim();
-        if (current) sendSearch(current, 'searching');
+        if (current) {
+          showRefreshToast();
+          sendSearch(current, 'searching');
+        }
         return;
       }
 
@@ -91,7 +110,7 @@ export function useSearchSocket() {
     } catch (err) {
       console.error('Failed to parse WS message:', err);
     }
-  }, [sendSearch]);
+  }, [sendSearch, showRefreshToast]);
 
   useEffect(() => {
     let closedByCleanup = false;
@@ -162,6 +181,10 @@ export function useSearchSocket() {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -202,5 +225,7 @@ export function useSearchSocket() {
     indexStatus,
     workStatus,
     isSearching,
+    refreshToast,
+    setRefreshToast,
   };
 }

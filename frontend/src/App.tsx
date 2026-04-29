@@ -50,6 +50,8 @@ export default function App() {
     indexStatus,
     workStatus,
     isSearching,
+    refreshToast,
+    setRefreshToast,
   } = useSearchSocket();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +81,7 @@ export default function App() {
   const switchToEnglishLabel = t('locale.switchToEnglish');
   const zhCurrentLabel = locale === 'zh-CN' ? '中文（当前语言）' : 'Chinese (current language)';
   const enCurrentLabel = locale === 'zh-CN' ? '英文（当前语言）' : 'English (current language)';
+  const activeToast = toast ?? refreshToast;
   const emptyStateMessage =
     indexStatus === 'refreshing'
       ? t('empty.indexRefreshing')
@@ -356,22 +359,25 @@ export default function App() {
       </div>
 
       {/* Toast Notification */}
-      {toast && (
+      {activeToast && (
         <div 
           className={cn(
             "fixed top-10 right-10 flex items-center gap-3 px-5 py-4 rounded-xl border shadow-2xl animate-in slide-in-from-right-10 duration-300 z-50",
-            toast.type === 'error' 
+            activeToast.type === 'error' 
               ? 'bg-zinc-900 border-red-900/50 text-red-400' 
               : 'bg-zinc-900 border-emerald-900/50 text-emerald-400'
           )}
         >
-          {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
-          <span className="text-sm font-bold tracking-tight">{toast.msg}</span>
+          {activeToast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+          <span className="text-sm font-bold tracking-tight">{activeToast.msg}</span>
           <button
             type="button"
             aria-label={t('toast.dismiss')}
             title={t('toast.dismiss')}
-            onClick={() => setToast(null)}
+            onClick={() => {
+              setToast(null);
+              setRefreshToast(null);
+            }}
             className="ml-4 opacity-50 hover:opacity-100 transition-opacity"
           >
             <X size={16} />

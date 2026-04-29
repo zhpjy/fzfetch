@@ -11,6 +11,8 @@ const searchSocketState = vi.hoisted(() => ({
   initialQuery: '',
   initialResults: [] as any[],
   isSearching: false,
+  refreshToast: null as null | { msg: string; type: 'success' | 'error' },
+  setRefreshToast: vi.fn(),
 }));
 
 const kbNavState = vi.hoisted(() => ({
@@ -94,6 +96,8 @@ vi.mock('./hooks/useSearchSocket', async () => {
         indexStatus: searchSocketState.indexStatus,
         workStatus: searchSocketState.workStatus,
         isSearching: searchSocketState.isSearching,
+        refreshToast: searchSocketState.refreshToast,
+        setRefreshToast: searchSocketState.setRefreshToast,
       };
     },
   };
@@ -153,6 +157,8 @@ describe('App', () => {
     searchSocketState.initialQuery = '';
     searchSocketState.initialResults = [];
     searchSocketState.isSearching = false;
+    searchSocketState.refreshToast = null;
+    searchSocketState.setRefreshToast = vi.fn();
     kbNavState.lastOnEscape = undefined;
     statusIndicatorState.lastProps = null;
     localStorage.clear();
@@ -457,5 +463,17 @@ describe('App', () => {
       '/very/long/workspace/frontend/src/components/report-item.tsx',
     );
     expect(displayedPath.textContent).toContain('...');
+  });
+
+  it('renders refresh toast using the existing success toast UI', () => {
+    searchSocketState.refreshToast = {
+      msg: 'Search results updated',
+      type: 'success',
+    };
+
+    renderApp('en');
+
+    expect(screen.getByText('Search results updated')).toBeInTheDocument();
+    expect(screen.getByLabelText('Dismiss')).toBeInTheDocument();
   });
 });
