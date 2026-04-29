@@ -7,7 +7,8 @@ use tokio::task;
 use tokio::time::sleep;
 
 use crate::cache::{
-    CacheLayoutStatus, FileRecord, ensure_cache_layout, load_cache_records, write_cache_snapshot,
+    CacheLayoutStatus, FileSnapshot, ensure_cache_layout, load_cache_records, snapshot_records,
+    write_cache_snapshot,
 };
 use crate::config::AppConfig;
 use crate::scanner::{diff_records, scan_root_files};
@@ -98,7 +99,7 @@ impl IndexManager {
         let path_count = records.len();
 
         let mut engine = SearchEngine::new();
-        engine.seed(records.into_values());
+        engine.seed(snapshot_records(&records));
 
         let last_refresh_at = std::fs::metadata(&self.config.cache_file)
             .and_then(|meta| meta.modified())
@@ -291,7 +292,7 @@ impl IndexManager {
                     // 路径全集与 matcher 要一起推进，避免搜索看到半更新状态。
                     let mut engine = runtime.engine.lock().await;
                     engine.apply_diff(
-                        &blocking_output.new_records,
+                        snapshot_records(&blocking_output.new_records),
                         &blocking_output.diff.added,
                         &blocking_output.diff.removed,
                     );
@@ -340,7 +341,7 @@ impl IndexManager {
 }
 
 struct BlockingRefreshOutput {
-    new_records: std::collections::HashMap<String, FileRecord>,
+    new_records: FileSnapshot,
     diff: crate::scanner::IndexDiff,
     refreshed_cache_mtime: SystemTime,
 }

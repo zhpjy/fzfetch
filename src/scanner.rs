@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::cache::FileRecord;
+use crate::cache::{FileRecord, FileSnapshot, file_record_from_snapshot};
 
 pub struct IndexDiff {
     pub added: Vec<FileRecord>,
@@ -11,7 +11,7 @@ pub struct IndexDiff {
 pub fn scan_root_files(
     root_dir: &Path,
     excluded_dirs: &[PathBuf],
-) -> anyhow::Result<HashMap<String, FileRecord>> {
+) -> anyhow::Result<FileSnapshot> {
     let mut files = HashMap::new();
     let mut walker = walkdir::WalkDir::new(root_dir).into_iter();
     while let Some(entry) = walker.next() {
@@ -33,39 +33,34 @@ pub fn scan_root_files(
                 Err(_) => continue,
             };
             let utf8_path = match abs.to_str() {
-                Some(path) => path.to_owned(),
+                Some(path) => path.to_owned().into_boxed_str(),
                 None => continue,
             };
             let size_bytes = entry.metadata().ok().map(|meta| meta.len());
-            files.insert(
-                utf8_path.clone(),
-                FileRecord {
-                    path: utf8_path,
-                    size_bytes,
-                },
-            );
+            files.insert(utf8_path, size_bytes);
         }
     }
     Ok(files)
 }
 
 pub fn diff_records(
-    old_records: &HashMap<String, FileRecord>,
-    new_records: &HashMap<String, FileRecord>,
+    old_records: &FileSnapshot,
+    new_records: &FileSnapshot,
 ) -> IndexDiff {
     let mut added: Vec<FileRecord> = new_records
         .iter()
-        .filter_map(|(path, record)| match old_records.get(path) {
-            Some(old_record) if old_record == record => None,
-            _ => Some(record.clone()),
+        .filter_map(|(path, size_bytes)| match old_records.get(path) {
+            Some(old_size_bytes) if old_size_bytes == size_bytes => None,
+            _ => Some(file_record_from_snapshot(path, *size_bytes)),
         })
         .collect();
     let mut removed: Vec<String> = old_records
         .iter()
-        .filter_map(|(path, record)| match new_records.get(path) {
-            Some(new_record) if new_record == record => None,
+        .filter_map(|(path, size_bytes)| match new_records.get(path) {
+            Some(new_size_bytes) if new_size_bytes == size_bytes => None,
             _ => Some(path.clone()),
         })
+        .map(String::from)
         .collect();
     added.sort_by(|left, right| left.path.cmp(&right.path));
     removed.sort();

@@ -1,6 +1,5 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -47,19 +46,17 @@ impl SearchEngine {
         self.inject_records(records);
     }
 
-    pub fn apply_diff(
-        &mut self,
-        new_records: &HashMap<String, FileRecord>,
-        added: &[FileRecord],
-        removed: &[String],
-    ) {
+    pub fn apply_diff<I>(&mut self, new_records: I, added: &[FileRecord], removed: &[String])
+    where
+        I: IntoIterator<Item = FileRecord>,
+    {
         if removed.is_empty() {
             self.inject_records(added.iter().cloned());
             return;
         }
 
         self.nucleo.restart(true);
-        self.inject_records(new_records.values().cloned());
+        self.inject_records(new_records);
     }
 
     pub fn search(&mut self, query: &str, top_k: usize) -> Vec<SearchHit> {

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
-use fzfetch::cache::{FileRecord, ensure_cache_layout, write_cache_snapshot};
+use fzfetch::cache::{FileSnapshot, ensure_cache_layout, write_cache_snapshot};
 use fzfetch::config::AppConfig;
 use fzfetch::state::IndexStatus;
 use fzfetch::state::AppState;
@@ -37,18 +37,12 @@ async fn ensure_loaded_builds_search_engine_from_cache() {
         &cache_file,
         &HashMap::from([
             (
-                alpha.to_string_lossy().to_string(),
-                FileRecord {
-                    path: alpha.to_string_lossy().to_string(),
-                    size_bytes: Some(11),
-                },
+                alpha.to_string_lossy().to_string().into_boxed_str(),
+                Some(11),
             ),
             (
-                beta.to_string_lossy().to_string(),
-                FileRecord {
-                    path: beta.to_string_lossy().to_string(),
-                    size_bytes: Some(22),
-                },
+                beta.to_string_lossy().to_string().into_boxed_str(),
+                Some(22),
             ),
         ]),
     )
@@ -102,7 +96,7 @@ async fn refresh_due_uses_cache_mtime() {
     let data_dir = temp.path().join("data");
     let cache_file = data_dir.join("cache.txt");
     ensure_cache_layout(&data_dir, &cache_file).unwrap();
-    write_cache_snapshot(&cache_file, &HashMap::new()).unwrap();
+    write_cache_snapshot(&cache_file, &FileSnapshot::new()).unwrap();
 
     let mut config = build_config(&root, data_dir, cache_file);
     config.refresh_ttl = Duration::from_secs(60);
@@ -135,7 +129,7 @@ async fn refresh_success_updates_last_refresh_at_from_cache_mtime() {
     let data_dir = temp.path().join("data");
     let cache_file = data_dir.join("cache.txt");
     ensure_cache_layout(&data_dir, &cache_file).unwrap();
-    write_cache_snapshot(&cache_file, &HashMap::new()).unwrap();
+    write_cache_snapshot(&cache_file, &FileSnapshot::new()).unwrap();
     tokio::time::sleep(Duration::from_millis(25)).await;
 
     let state = AppState::new(build_config(&root, data_dir, cache_file.clone()));

@@ -16,6 +16,8 @@ pub struct FileRecord {
     pub size_bytes: Option<u64>,
 }
 
+pub type FileSnapshot = HashMap<Box<str>, Option<u64>>;
+
 pub fn ensure_cache_layout(
     data_dir: &Path,
     cache_file: &Path,
@@ -34,14 +36,14 @@ pub fn ensure_cache_layout(
     }
 }
 
-pub fn load_cache_records(cache_file: &Path) -> anyhow::Result<HashMap<String, FileRecord>> {
+pub fn load_cache_records(cache_file: &Path) -> anyhow::Result<FileSnapshot> {
     let file = fs::File::open(cache_file)?;
     load_cache_records_from_reader(BufReader::new(file))
 }
 
 pub fn load_cache_records_from_reader<R: BufRead>(
     reader: R,
-) -> anyhow::Result<HashMap<String, FileRecord>> {
+) -> anyhow::Result<FileSnapshot> {
     let mut records = HashMap::new();
     for line in reader.lines() {
         let line = line?;
@@ -51,22 +53,22 @@ pub fn load_cache_records_from_reader<R: BufRead>(
         }
 
         let record = parse_cache_line(trimmed)?;
-        records.insert(record.path.clone(), record);
+        records.insert(record.0, record.1);
     }
     Ok(records)
 }
 
 pub fn write_cache_snapshot(
     cache_file: &Path,
-    records: &HashMap<String, FileRecord>,
+    records: &FileSnapshot,
 ) -> anyhow::Result<()> {
     let parent = cache_file
         .parent()
         .ok_or_else(|| anyhow::anyhow!("cache file has no parent: {}", cache_file.display()))?;
     fs::create_dir_all(parent)?;
 
-    let mut sorted: Vec<&FileRecord> = records.values().collect();
-    sorted.sort_by(|left, right| left.path.cmp(&right.path));
+    let mut sorted: Vec<(&Box<str>, &Option<u64>)> = records.iter().collect();
+    sorted.sort_by(|left, right| left.0.cmp(right.0));
 
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -82,13 +84,13 @@ pub fn write_cache_snapshot(
     ));
 
     let mut output = String::new();
-    for record in sorted {
-        match record.size_bytes {
+    for (path, size_bytes) in sorted {
+        match size_bytes {
             Some(size_bytes) => output.push_str(&size_bytes.to_string()),
             None => output.push('-'),
         }
         output.push('\t');
-        output.push_str(&record.path);
+        output.push_str(path);
         output.push('\n');
     }
 
@@ -97,9 +99,24 @@ pub fn write_cache_snapshot(
     Ok(())
 }
 
-fn parse_cache_line(line: &str) -> anyhow::Result<FileRecord> {
+pub fn snapshot_records(
+    snapshot: &FileSnapshot,
+) -> impl Iterator<Item = FileRecord> + '_ {
+    snapshot
+        .iter()
+        .map(|(path, size_bytes)| file_record_from_snapshot(path, *size_bytes))
+}
+
+pub fn file_record_from_snapshot(path: &str, size_bytes: Option<u64>) -> FileRecord {
+    FileRecord {
+        path: path.to_string(),
+        size_bytes,
+    }
+}
+
+fn parse_cache_line(line: &str) -> anyhow::Result<(Box<str>, Option<u64>)> {
     if let Some((size_field, path_field)) = line.split_once('\t') {
-        let path = path_field.trim().to_owned();
+        let path = path_field.trim();
         if path.is_empty() {
             anyhow::bail!("cache record path is empty");
         }
@@ -111,11 +128,8 @@ fn parse_cache_line(line: &str) -> anyhow::Result<FileRecord> {
                 anyhow::anyhow!("invalid cache record size '{size_field}': {error}")
             })?)
         };
-        Ok(FileRecord { path, size_bytes })
+        Ok((path.to_string().into_boxed_str(), size_bytes))
     } else {
-        Ok(FileRecord {
-            path: line.to_owned(),
-            size_bytes: None,
-        })
+        Ok((line.to_string().into_boxed_str(), None))
     }
 }
