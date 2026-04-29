@@ -19,6 +19,7 @@ pub struct SearchHit {
 
 pub struct SearchEngine {
     nucleo: Nucleo<FileRecord>,
+    matcher: Matcher,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +45,8 @@ impl SearchEngine {
             num_threads,
             1,
         );
-        Self { nucleo }
+        let matcher = Matcher::new(Config::DEFAULT);
+        Self { nucleo, matcher }
     }
 
     pub fn seed(&mut self, records: impl IntoIterator<Item = FileRecord>) {
@@ -72,14 +74,14 @@ impl SearchEngine {
         self.drain();
 
         let snapshot = self.nucleo.snapshot();
-        let mut matcher = Matcher::new(Config::DEFAULT);
         let query = query.trim().to_lowercase();
-        let hits = snapshot
+        collect_top_hits(
+            snapshot
             .matched_items(..)
             .map(|item| {
                 let score = snapshot
                     .pattern()
-                    .score(item.matcher_columns, &mut matcher)
+                    .score(item.matcher_columns, &mut self.matcher)
                     .unwrap_or_default();
                 let basename_match = basename_contains_query(&item.data.path, &query);
 
@@ -92,10 +94,9 @@ impl SearchEngine {
                         size_bytes: item.data.size_bytes,
                     },
                 )
-            })
-            .collect::<Vec<_>>();
-
-        collect_top_hits(hits, top_k)
+            }),
+            top_k,
+        )
     }
 
     fn inject_records(&mut self, records: impl IntoIterator<Item = FileRecord>) {
@@ -144,7 +145,7 @@ impl PartialOrd for RankedHit {
     }
 }
 
-fn collect_top_hits(hits: Vec<RankedHit>, top_k: usize) -> Vec<SearchHit> {
+fn collect_top_hits(hits: impl IntoIterator<Item = RankedHit>, top_k: usize) -> Vec<SearchHit> {
     if top_k == 0 {
         return Vec::new();
     }
@@ -256,7 +257,7 @@ mod tests {
     #[test]
     fn collect_top_hits_keeps_only_best_ranked_hits() {
         let hits = collect_top_hits(
-            vec![
+            [
                 RankedHit::new(
                     false,
                     10,
@@ -284,7 +285,8 @@ mod tests {
                         size_bytes: Some(3),
                     },
                 ),
-            ],
+            ]
+            .into_iter(),
             2,
         );
 
