@@ -1,3 +1,5 @@
+use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -16,6 +18,13 @@ pub struct SearchHit {
 
 pub struct SearchEngine {
     nucleo: Nucleo<FileRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RankedHit {
+    basename_match: bool,
+    score: u32,
+    hit: SearchHit,
 }
 
 fn default_nucleo_threads() -> Option<usize> {
@@ -62,7 +71,7 @@ impl SearchEngine {
         let snapshot = self.nucleo.snapshot();
         let mut matcher = Matcher::new(Config::DEFAULT);
         let query = query.trim().to_lowercase();
-        let mut hits: Vec<_> = snapshot
+        let hits = snapshot
             .matched_items(..)
             .map(|item| {
                 let score = snapshot
@@ -71,7 +80,7 @@ impl SearchEngine {
                     .unwrap_or_default();
                 let basename_match = basename_contains_query(&item.data.path, &query);
 
-                (
+                RankedHit::new(
                     basename_match,
                     score,
                     SearchHit {
@@ -81,15 +90,9 @@ impl SearchEngine {
                     },
                 )
             })
-            .collect();
+            .collect::<Vec<_>>();
 
-        hits.sort_by(|a, b| {
-            b.0.cmp(&a.0)
-                .then_with(|| b.1.cmp(&a.1))
-                .then_with(|| a.2.path.cmp(&b.2.path))
-        });
-
-        hits.into_iter().take(top_k).map(|(_, _, hit)| hit).collect()
+        collect_top_hits(hits, top_k)
     }
 
     fn inject_records(&mut self, records: impl IntoIterator<Item = FileRecord>) {
@@ -113,6 +116,58 @@ impl Default for SearchEngine {
     }
 }
 
+impl RankedHit {
+    fn new(basename_match: bool, score: u32, hit: SearchHit) -> Self {
+        Self {
+            basename_match,
+            score,
+            hit,
+        }
+    }
+}
+
+impl Ord for RankedHit {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.basename_match
+            .cmp(&other.basename_match)
+            .then_with(|| self.score.cmp(&other.score))
+            .then_with(|| other.hit.path.cmp(&self.hit.path))
+    }
+}
+
+impl PartialOrd for RankedHit {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn collect_top_hits(hits: Vec<RankedHit>, top_k: usize) -> Vec<SearchHit> {
+    if top_k == 0 {
+        return Vec::new();
+    }
+
+    let mut heap: BinaryHeap<Reverse<RankedHit>> = BinaryHeap::with_capacity(top_k);
+    for hit in hits {
+        if heap.len() < top_k {
+            heap.push(Reverse(hit));
+            continue;
+        }
+
+        let should_replace = heap
+            .peek()
+            .map(|worst| hit > worst.0)
+            .unwrap_or(true);
+        if should_replace {
+            heap.pop();
+            heap.push(Reverse(hit));
+        }
+    }
+
+    let mut ranked_hits = heap.into_iter().map(|Reverse(hit)| hit).collect::<Vec<_>>();
+    ranked_hits.sort_by(|left, right| right.cmp(left));
+    ranked_hits.into_iter().map(|ranked| ranked.hit).collect()
+}
+
 fn basename_contains_query(path: &str, query: &str) -> bool {
     if query.is_empty() {
         return false;
@@ -129,7 +184,7 @@ fn basename_contains_query(path: &str, query: &str) -> bool {
 mod tests {
     use crate::cache::FileRecord;
 
-    use super::{SearchEngine, default_nucleo_threads};
+    use super::{SearchEngine, SearchHit, RankedHit, collect_top_hits, default_nucleo_threads};
 
     #[test]
     fn search_engine_defaults_to_nucleo_auto_thread_count() {
@@ -190,5 +245,82 @@ mod tests {
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].path, "/library/misc/needle-report.txt");
         assert_eq!(hits[1].path, "/library/needle/archive.txt");
+    }
+
+    #[test]
+    fn collect_top_hits_keeps_only_best_ranked_hits() {
+        let hits = collect_top_hits(
+            vec![
+                RankedHit::new(
+                    false,
+                    10,
+                    SearchHit {
+                        path: "/tmp/zeta.txt".to_string(),
+                        score: 10,
+                        size_bytes: Some(1),
+                    },
+                ),
+                RankedHit::new(
+                    true,
+                    5,
+                    SearchHit {
+                        path: "/tmp/beta.txt".to_string(),
+                        score: 5,
+                        size_bytes: Some(2),
+                    },
+                ),
+                RankedHit::new(
+                    true,
+                    5,
+                    SearchHit {
+                        path: "/tmp/alpha.txt".to_string(),
+                        score: 5,
+                        size_bytes: Some(3),
+                    },
+                ),
+            ],
+            2,
+        );
+
+        assert_eq!(
+            hits,
+            vec![
+                SearchHit {
+                    path: "/tmp/alpha.txt".to_string(),
+                    score: 5,
+                    size_bytes: Some(3),
+                },
+                SearchHit {
+                    path: "/tmp/beta.txt".to_string(),
+                    score: 5,
+                    size_bytes: Some(2),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn search_respects_top_k_without_reordering_best_hits() {
+        let mut engine = SearchEngine::new();
+        engine.seed([
+            FileRecord {
+                path: "/library/reports/report-zeta.txt".to_string(),
+                size_bytes: Some(1),
+            },
+            FileRecord {
+                path: "/library/reports/report-beta.txt".to_string(),
+                size_bytes: Some(2),
+            },
+            FileRecord {
+                path: "/library/reports/report-alpha.txt".to_string(),
+                size_bytes: Some(3),
+            },
+        ]);
+
+        let hits = engine.search("report", 2);
+
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].path, "/library/reports/report-alpha.txt");
+        assert_eq!(hits[1].path, "/library/reports/report-beta.txt");
     }
 }
