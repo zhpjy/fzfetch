@@ -81,6 +81,7 @@ The backend listens on `0.0.0.0:3000` by default.
 | `FZFETCH_IDLE_TTL_SECS` | `1800` | Idle lifetime in seconds before the in-memory index is unloaded |
 | `FZFETCH_CLEANUP_INTERVAL_SECS` | `60` | Cleanup loop interval in seconds |
 | `FZFETCH_TOP_K` | `100` | Maximum number of results returned per search |
+| `FZFETCH_NUCLEO_THREADS` | `4` | Number of `nucleo` matcher threads used to bound search worker memory growth |
 
 Notes:
 

@@ -36,6 +36,7 @@ fn config_uses_expected_defaults() {
     assert_eq!(config.data_dir, PathBuf::from("data"));
     assert_eq!(config.cache_file, PathBuf::from("data/cache.txt"));
     assert_eq!(config.top_k, 100);
+    assert_eq!(config.nucleo_threads, 4);
 }
 
 #[test]
@@ -102,6 +103,25 @@ fn from_env_parses_exclude_dirs_and_ignores_empty_items() {
         std::env::remove_var("FZFETCH_ROOT");
         std::env::remove_var("FZFETCH_DATA_DIR");
         std::env::remove_var("FZFETCH_EXCLUDE_DIRS");
+    }
+}
+
+#[test]
+fn from_env_honors_nucleo_thread_override() {
+    let _guard = env_lock().lock().unwrap();
+    unsafe {
+        std::env::remove_var("FZFETCH_ROOT");
+        std::env::remove_var("FZFETCH_DATA_DIR");
+        std::env::remove_var("FZFETCH_EXCLUDE_DIRS");
+        std::env::set_var("FZFETCH_NUCLEO_THREADS", "2");
+    }
+
+    let config = fzfetch::config::AppConfig::from_env().unwrap();
+
+    assert_eq!(config.nucleo_threads, 2);
+
+    unsafe {
+        std::env::remove_var("FZFETCH_NUCLEO_THREADS");
     }
 }
 

@@ -8,6 +8,8 @@ use nucleo::{Config, Matcher, Nucleo, Utf32String};
 
 use crate::cache::FileRecord;
 
+const DEFAULT_NUCLEO_THREADS: usize = 4;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchHit {
     pub path: String,
@@ -27,15 +29,19 @@ struct RankedHit {
 }
 
 fn default_nucleo_threads() -> Option<usize> {
-    None
+    Some(DEFAULT_NUCLEO_THREADS)
 }
 
 impl SearchEngine {
     pub fn new() -> Self {
+        Self::with_threads(default_nucleo_threads())
+    }
+
+    pub fn with_threads(num_threads: Option<usize>) -> Self {
         let nucleo = Nucleo::new(
             Config::DEFAULT,
             Arc::new(|| {}),
-            default_nucleo_threads(),
+            num_threads,
             1,
         );
         Self { nucleo }
@@ -181,11 +187,14 @@ fn basename_contains_query(path: &str, query: &str) -> bool {
 mod tests {
     use crate::cache::FileRecord;
 
-    use super::{SearchEngine, SearchHit, RankedHit, collect_top_hits, default_nucleo_threads};
+    use super::{
+        DEFAULT_NUCLEO_THREADS, SearchEngine, SearchHit, RankedHit, collect_top_hits,
+        default_nucleo_threads,
+    };
 
     #[test]
-    fn search_engine_defaults_to_nucleo_auto_thread_count() {
-        assert_eq!(default_nucleo_threads(), None);
+    fn search_engine_defaults_to_bounded_nucleo_thread_count() {
+        assert_eq!(default_nucleo_threads(), Some(DEFAULT_NUCLEO_THREADS));
     }
 
     #[test]

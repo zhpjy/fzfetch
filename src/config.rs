@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub idle_ttl: Duration,
     pub cleanup_interval: Duration,
     pub top_k: usize,
+    pub nucleo_threads: usize,
     pub force_initial_refresh: bool,
 }
 
@@ -31,6 +32,7 @@ impl AppConfig {
             idle_ttl: Duration::from_secs(30 * 60),
             cleanup_interval: Duration::from_secs(60),
             top_k: 100,
+            nucleo_threads: 4,
             force_initial_refresh: false,
         }
     }
@@ -48,6 +50,7 @@ impl AppConfig {
         config.cleanup_interval =
             Duration::from_secs(parse_u64_env("FZFETCH_CLEANUP_INTERVAL_SECS", 60)?);
         config.top_k = parse_usize_env("FZFETCH_TOP_K", 100)?;
+        config.nucleo_threads = parse_nonzero_usize_env("FZFETCH_NUCLEO_THREADS", 4)?;
         config.refresh_canonical_exclude_dirs();
         Ok(config)
     }
@@ -87,6 +90,14 @@ fn parse_usize_env(name: &str, default: usize) -> anyhow::Result<usize> {
         Err(error) => return Err(anyhow::anyhow!("failed to read {name}: {error}")),
     };
     parse_usize_value(name, value, default)
+}
+
+fn parse_nonzero_usize_env(name: &str, default: usize) -> anyhow::Result<usize> {
+    let value = parse_usize_env(name, default)?;
+    if value == 0 {
+        anyhow::bail!("{name} must be greater than zero");
+    }
+    Ok(value)
 }
 
 fn parse_path_list_env(name: &str) -> anyhow::Result<Vec<PathBuf>> {

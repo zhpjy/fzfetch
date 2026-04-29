@@ -98,7 +98,7 @@ impl IndexManager {
         let records = load_cache_records(&self.config.cache_file)?;
         let path_count = records.len();
 
-        let mut engine = SearchEngine::new();
+        let mut engine = SearchEngine::with_threads(Some(self.config.nucleo_threads));
         engine.seed(snapshot_records(&records));
 
         let last_refresh_at = std::fs::metadata(&self.config.cache_file)

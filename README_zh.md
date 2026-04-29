@@ -81,6 +81,7 @@ npm --prefix frontend test
 | `FZFETCH_IDLE_TTL_SECS` | `1800` | 索引空闲秒数，超过后会从内存卸载 |
 | `FZFETCH_CLEANUP_INTERVAL_SECS` | `60` | 后台清理循环检查周期 |
 | `FZFETCH_TOP_K` | `100` | 单次搜索返回结果上限 |
+| `FZFETCH_NUCLEO_THREADS` | `4` | `nucleo` 匹配线程数，用于限制搜索线程池的内存放大 |
 
 补充说明：
 
