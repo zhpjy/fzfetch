@@ -113,7 +113,7 @@ Linux ARM64 交叉编译如果直接在 GitHub-hosted runner 上配置成本过�
 配置文件字段：
 
 ```toml
-root_dir = "files"
+search_dir = "files"
 data_dir = "data"
 exclude_dirs = ["tmp", "cache/private"]
 
@@ -124,9 +124,9 @@ top_k = 100
 nucleo_threads = 4
 ```
 
-环境变量继续使用现有名称：
+环境变量使用以下名称：
 
-- `FZFETCH_ROOT`
+- `FZFETCH_SEARCH_DIR`
 - `FZFETCH_DATA_DIR`
 - `FZFETCH_EXCLUDE_DIRS`
 - `FZFETCH_REFRESH_TTL_SECS`
@@ -137,6 +137,12 @@ nucleo_threads = 4
 - `FZFETCH_CONFIG`
 
 `FZFETCH_EXCLUDE_DIRS` 仍保持逗号分隔格式。配置文件中的 `exclude_dirs` 使用 TOML 数组表达。
+
+不保留旧名称兼容：
+
+- 配置文件字段不支持 `root_dir`。
+- 环境变量不支持 `FZFETCH_ROOT`。
+- 目录语义统一命名为 `search_dir` / `FZFETCH_SEARCH_DIR`。
 
 ## 样例配置文件
 
@@ -150,9 +156,9 @@ nucleo_threads = 4
 
 Dockerfile 可以继续把 `frontend/dist` 复制进镜像，也可以在 Rust binary 内嵌前端后删掉 runtime 阶段的静态文件复制。为了降低本次变更风险，推荐先保持 Docker 行为兼容：即使 binary 已经内嵌前端，镜像仍可正常运行。
 
-配置文件支持不改变 Docker 默认环境变量：
+Docker 默认环境变量同步为新的搜索目录命名：
 
-- `FZFETCH_ROOT=/files`
+- `FZFETCH_SEARCH_DIR=/files`
 - `FZFETCH_DATA_DIR=/data`
 
 容器用户仍可通过环境变量覆盖配置。
@@ -164,7 +170,7 @@ Dockerfile 可以继续把 `frontend/dist` 复制进镜像，也可以在 Rust b
 - TOML 解析失败：启动失败并指出配置文件路径。
 - 数值字段无法解析或非法：启动失败。
 - `nucleo_threads = 0`：启动失败。
-- `exclude_dirs` 中指向根目录外的路径：沿用现有行为，忽略该项。
+- `exclude_dirs` 中指向搜索目录外的路径：沿用现有行为，忽略该项。
 
 ## 测试策略
 
