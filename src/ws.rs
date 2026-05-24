@@ -61,6 +61,10 @@ fn index_status_message(status: IndexStatus) -> Message {
     Message::Text(format!("{{\"type\":\"INDEX_STATUS\",\"state\":\"{state}\"}}").into())
 }
 
+fn broadcast_message(payload: String) -> Message {
+    Message::Text(payload.into())
+}
+
 async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     tracing::info!("websocket client connected");
     let latest_req_id = Arc::new(AtomicU64::new(0));
