@@ -15,21 +15,18 @@ fn build_config(root_dir: &Path) -> AppConfig {
     config
 }
 
-fn build_app(root_dir: &Path, web_dir: &Path) -> Router {
+fn build_app(root_dir: &Path) -> Router {
     let state = Arc::new(AppState::new(build_config(root_dir)));
-    fzfetch::web::build_app(state, web_dir)
+    fzfetch::web::build_app(state)
 }
 
 #[tokio::test]
 async fn app_serves_index_for_unknown_frontend_route() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("root");
-    let web_dir = temp.path().join("dist");
     fs::create_dir_all(&root).unwrap();
-    fs::create_dir_all(&web_dir).unwrap();
-    fs::write(web_dir.join("index.html"), "<html><body>spa</body></html>").unwrap();
 
-    let response = build_app(&root, &web_dir)
+    let response = build_app(&root)
         .oneshot(
             Request::builder()
                 .uri("/search")
@@ -41,45 +38,41 @@ async fn app_serves_index_for_unknown_frontend_route() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    assert!(String::from_utf8_lossy(&body).contains("spa"));
+    assert!(String::from_utf8_lossy(&body).contains("<!doctype html"));
 }
 
 #[tokio::test]
 async fn app_serves_static_asset_files() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("root");
-    let web_dir = temp.path().join("dist");
-    let assets_dir = web_dir.join("assets");
     fs::create_dir_all(&root).unwrap();
-    fs::create_dir_all(&assets_dir).unwrap();
-    fs::write(web_dir.join("index.html"), "<html><body>spa</body></html>").unwrap();
-    fs::write(assets_dir.join("app.js"), "console.log('asset');").unwrap();
 
-    let response = build_app(&root, &web_dir)
-        .oneshot(
-            Request::builder()
-                .uri("/assets/app.js")
-                .body(Body::empty())
-                .unwrap(),
-        )
+    let asset_path = fs::read_dir("frontend/dist/assets")
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let asset_name = asset_path.file_name().unwrap().to_string_lossy();
+    let uri = format!("/assets/{asset_name}");
+
+    let response = build_app(&root)
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    assert_eq!(body, "console.log('asset');");
+    assert!(!body.is_empty());
 }
 
 #[tokio::test]
 async fn app_keeps_download_route_reserved_for_api() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("root");
-    let web_dir = temp.path().join("dist");
     fs::create_dir_all(&root).unwrap();
-    fs::create_dir_all(&web_dir).unwrap();
-    fs::write(web_dir.join("index.html"), "<html><body>spa</body></html>").unwrap();
 
-    let response = build_app(&root, &web_dir)
+    let response = build_app(&root)
         .oneshot(
             Request::builder()
                 .uri("/download")

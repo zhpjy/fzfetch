@@ -1,5 +1,4 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use tracing_subscriber::EnvFilter;
@@ -46,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
         cleanup_manager.run_cleanup_loop().await;
     });
 
-    let app = build_app(state, PathBuf::from("frontend/dist"));
+    let app = build_app(state);
     let addr = SocketAddr::from((IpAddr::V4(Ipv4Addr::UNSPECIFIED), 3000));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "fzfetch backend listening");
