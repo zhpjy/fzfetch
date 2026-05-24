@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -12,6 +13,81 @@ use fzfetch::scanner::{diff_records, scan_root_files};
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
+}
+
+const CONFIG_ENV_VARS: &[&str] = &[
+    "FZFETCH_CONFIG",
+    "FZFETCH_SEARCH_DIR",
+    "FZFETCH_ROOT",
+    "FZFETCH_DATA_DIR",
+    "FZFETCH_EXCLUDE_DIRS",
+    "FZFETCH_REFRESH_TTL_SECS",
+    "FZFETCH_IDLE_TTL_SECS",
+    "FZFETCH_CLEANUP_INTERVAL_SECS",
+    "FZFETCH_TOP_K",
+    "FZFETCH_NUCLEO_THREADS",
+];
+
+struct EnvGuard {
+    saved: Vec<(&'static str, Option<OsString>)>,
+}
+
+impl EnvGuard {
+    fn clear_config_vars() -> Self {
+        let saved = CONFIG_ENV_VARS
+            .iter()
+            .map(|&key| (key, std::env::var_os(key)))
+            .collect();
+        let guard = Self { saved };
+        for &key in CONFIG_ENV_VARS {
+            guard.remove(key);
+        }
+        guard
+    }
+
+    fn set(&self, key: &'static str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            std::env::set_var(key, value);
+        }
+    }
+
+    fn remove(&self, key: &'static str) {
+        unsafe {
+            std::env::remove_var(key);
+        }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in &self.saved {
+            unsafe {
+                if let Some(value) = value {
+                    std::env::set_var(key, value);
+                } else {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+    }
+}
+
+struct CwdGuard {
+    old_cwd: PathBuf,
+}
+
+impl CwdGuard {
+    fn set(path: impl AsRef<std::path::Path>) -> std::io::Result<Self> {
+        let old_cwd = std::env::current_dir()?;
+        std::env::set_current_dir(path)?;
+        Ok(Self { old_cwd })
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.old_cwd);
+    }
 }
 
 #[test]
@@ -128,16 +204,9 @@ fn from_env_honors_nucleo_thread_override() {
 #[test]
 fn from_sources_reads_default_config_file_when_present() {
     let _guard = env_lock().lock().unwrap();
+    let _env = EnvGuard::clear_config_vars();
     let temp = tempfile::tempdir().unwrap();
-    let old_cwd = std::env::current_dir().unwrap();
-    unsafe {
-        std::env::remove_var("FZFETCH_CONFIG");
-        std::env::remove_var("FZFETCH_SEARCH_DIR");
-        std::env::remove_var("FZFETCH_ROOT");
-        std::env::remove_var("FZFETCH_DATA_DIR");
-        std::env::remove_var("FZFETCH_EXCLUDE_DIRS");
-    }
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
     std::fs::write(
         temp.path().join("fzfetch.toml"),
         r#"
@@ -167,21 +236,16 @@ nucleo_threads = 2
     assert_eq!(config.cleanup_interval.as_secs(), 30);
     assert_eq!(config.top_k, 40);
     assert_eq!(config.nucleo_threads, 2);
-
-    std::env::set_current_dir(old_cwd).unwrap();
 }
 
 #[test]
 fn from_sources_env_overrides_config_file() {
     let _guard = env_lock().lock().unwrap();
+    let env = EnvGuard::clear_config_vars();
+    env.set("FZFETCH_SEARCH_DIR", "env-files");
+    env.set("FZFETCH_DATA_DIR", "env-data");
     let temp = tempfile::tempdir().unwrap();
-    let old_cwd = std::env::current_dir().unwrap();
-    unsafe {
-        std::env::remove_var("FZFETCH_CONFIG");
-        std::env::set_var("FZFETCH_SEARCH_DIR", "env-files");
-        std::env::set_var("FZFETCH_DATA_DIR", "env-data");
-    }
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
     std::fs::write(
         temp.path().join("fzfetch.toml"),
         r#"
@@ -196,22 +260,15 @@ data_dir = "toml-data"
     assert_eq!(config.root_dir, PathBuf::from("env-files"));
     assert_eq!(config.data_dir, PathBuf::from("env-data"));
     assert_eq!(config.cache_file, PathBuf::from("env-data/cache.txt"));
-
-    unsafe {
-        std::env::remove_var("FZFETCH_SEARCH_DIR");
-        std::env::remove_var("FZFETCH_DATA_DIR");
-    }
-    std::env::set_current_dir(old_cwd).unwrap();
 }
 
 #[test]
 fn from_sources_errors_when_explicit_config_is_missing() {
     let _guard = env_lock().lock().unwrap();
+    let env = EnvGuard::clear_config_vars();
     let temp = tempfile::tempdir().unwrap();
     let missing = temp.path().join("missing.toml");
-    unsafe {
-        std::env::set_var("FZFETCH_CONFIG", &missing);
-    }
+    env.set("FZFETCH_CONFIG", &missing);
 
     let error = fzfetch::config::AppConfig::from_sources()
         .unwrap_err()
@@ -219,40 +276,28 @@ fn from_sources_errors_when_explicit_config_is_missing() {
 
     assert!(error.contains("FZFETCH_CONFIG"));
     assert!(error.contains("missing.toml"));
-
-    unsafe {
-        std::env::remove_var("FZFETCH_CONFIG");
-    }
 }
 
 #[test]
 fn from_sources_rejects_root_dir_and_fzfetch_root() {
     let _guard = env_lock().lock().unwrap();
+    let env = EnvGuard::clear_config_vars();
+    env.set("FZFETCH_ROOT", "legacy");
     let temp = tempfile::tempdir().unwrap();
-    let old_cwd = std::env::current_dir().unwrap();
-    unsafe {
-        std::env::remove_var("FZFETCH_CONFIG");
-        std::env::remove_var("FZFETCH_SEARCH_DIR");
-        std::env::set_var("FZFETCH_ROOT", "legacy");
-    }
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
 
     let env_error = fzfetch::config::AppConfig::from_sources()
         .unwrap_err()
         .to_string();
     assert!(env_error.contains("FZFETCH_ROOT"));
 
-    unsafe {
-        std::env::remove_var("FZFETCH_ROOT");
-    }
+    env.remove("FZFETCH_ROOT");
     std::fs::write(temp.path().join("fzfetch.toml"), "root_dir = \"legacy\"\n").unwrap();
 
     let toml_error = fzfetch::config::AppConfig::from_sources()
         .unwrap_err()
         .to_string();
     assert!(toml_error.contains("root_dir"));
-
-    std::env::set_current_dir(old_cwd).unwrap();
 }
 
 #[test]
