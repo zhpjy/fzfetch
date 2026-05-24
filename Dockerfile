@@ -12,6 +12,7 @@ WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 RUN cargo build --release
 
 FROM debian:bookworm-slim AS runtime
