@@ -213,24 +213,6 @@ fn read_env_var(name: &str) -> anyhow::Result<Option<String>> {
     }
 }
 
-fn parse_u64_env(name: &str, default: u64) -> anyhow::Result<u64> {
-    let value = read_env_var(name)?;
-    parse_u64_value(name, value, default)
-}
-
-fn parse_usize_env(name: &str, default: usize) -> anyhow::Result<usize> {
-    let value = read_env_var(name)?;
-    parse_usize_value(name, value, default)
-}
-
-fn parse_nonzero_usize_env(name: &str, default: usize) -> anyhow::Result<usize> {
-    let value = parse_usize_env(name, default)?;
-    if value == 0 {
-        anyhow::bail!("{name} must be greater than zero");
-    }
-    Ok(value)
-}
-
 fn parse_path_list_env(name: &str) -> anyhow::Result<Option<Vec<PathBuf>>> {
     let Some(value) = read_env_var(name)? else {
         return Ok(None);

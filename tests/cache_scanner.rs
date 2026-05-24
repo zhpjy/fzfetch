@@ -119,6 +119,8 @@ fn config_uses_expected_defaults() {
 fn from_env_uses_local_default_directories() {
     let _guard = env_lock().lock().unwrap();
     let _env = EnvGuard::clear_config_vars();
+    let temp = tempfile::tempdir().unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
 
     let config = fzfetch::config::AppConfig::from_env().unwrap();
 
@@ -135,6 +137,8 @@ fn from_env_honors_search_and_data_dir_overrides() {
     let env = EnvGuard::clear_config_vars();
     env.set("FZFETCH_SEARCH_DIR", &root);
     env.set("FZFETCH_DATA_DIR", &data_dir);
+    let temp = tempfile::tempdir().unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
 
     let config = fzfetch::config::AppConfig::from_env().unwrap();
 
@@ -152,6 +156,8 @@ fn from_env_parses_exclude_dirs_and_ignores_empty_items() {
     let env = EnvGuard::clear_config_vars();
     env.set("FZFETCH_SEARCH_DIR", "/tmp/fzfetch-root");
     env.set("FZFETCH_EXCLUDE_DIRS", "tmp, nested/cache , ,logs");
+    let temp = tempfile::tempdir().unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
 
     let config = fzfetch::config::AppConfig::from_env().unwrap();
 
@@ -170,10 +176,44 @@ fn from_env_honors_nucleo_thread_override() {
     let _guard = env_lock().lock().unwrap();
     let env = EnvGuard::clear_config_vars();
     env.set("FZFETCH_NUCLEO_THREADS", "2");
+    let temp = tempfile::tempdir().unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
 
     let config = fzfetch::config::AppConfig::from_env().unwrap();
 
     assert_eq!(config.nucleo_threads, 2);
+}
+
+#[test]
+fn from_sources_reads_explicit_config_path_before_default_config_file() {
+    let _guard = env_lock().lock().unwrap();
+    let env = EnvGuard::clear_config_vars();
+    let temp = tempfile::tempdir().unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
+    let explicit = temp.path().join("explicit.toml");
+    env.set("FZFETCH_CONFIG", &explicit);
+    std::fs::write(
+        temp.path().join("fzfetch.toml"),
+        r#"
+search_dir = "default-files"
+data_dir = "default-data"
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        &explicit,
+        r#"
+search_dir = "explicit-files"
+data_dir = "explicit-data"
+"#,
+    )
+    .unwrap();
+
+    let config = fzfetch::config::AppConfig::from_sources().unwrap();
+
+    assert_eq!(config.root_dir, PathBuf::from("explicit-files"));
+    assert_eq!(config.data_dir, PathBuf::from("explicit-data"));
+    assert_eq!(config.cache_file, PathBuf::from("explicit-data/cache.txt"));
 }
 
 #[test]
@@ -238,6 +278,32 @@ data_dir = "toml-data"
 }
 
 #[test]
+fn from_sources_env_overrides_numeric_and_exclude_dir_config_values() {
+    let _guard = env_lock().lock().unwrap();
+    let env = EnvGuard::clear_config_vars();
+    env.set("FZFETCH_REFRESH_TTL_SECS", "99");
+    env.set("FZFETCH_EXCLUDE_DIRS", "env-tmp, env-cache");
+    let temp = tempfile::tempdir().unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
+    std::fs::write(
+        temp.path().join("fzfetch.toml"),
+        r#"
+exclude_dirs = ["toml-tmp", "toml-cache"]
+refresh_ttl_secs = 10
+"#,
+    )
+    .unwrap();
+
+    let config = fzfetch::config::AppConfig::from_sources().unwrap();
+
+    assert_eq!(config.refresh_ttl.as_secs(), 99);
+    assert_eq!(
+        config.exclude_dirs,
+        vec![PathBuf::from("env-tmp"), PathBuf::from("env-cache")]
+    );
+}
+
+#[test]
 fn from_sources_errors_when_explicit_config_is_missing() {
     let _guard = env_lock().lock().unwrap();
     let env = EnvGuard::clear_config_vars();
@@ -251,6 +317,38 @@ fn from_sources_errors_when_explicit_config_is_missing() {
 
     assert!(error.contains("FZFETCH_CONFIG"));
     assert!(error.contains("missing.toml"));
+}
+
+#[test]
+fn from_sources_rejects_zero_nucleo_threads_from_env() {
+    let _guard = env_lock().lock().unwrap();
+    let env = EnvGuard::clear_config_vars();
+    env.set("FZFETCH_NUCLEO_THREADS", "0");
+    let temp = tempfile::tempdir().unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
+
+    let error = fzfetch::config::AppConfig::from_sources()
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("FZFETCH_NUCLEO_THREADS"));
+    assert!(error.contains("greater than zero"));
+}
+
+#[test]
+fn from_sources_rejects_zero_nucleo_threads_from_config_file() {
+    let _guard = env_lock().lock().unwrap();
+    let _env = EnvGuard::clear_config_vars();
+    let temp = tempfile::tempdir().unwrap();
+    let _cwd = CwdGuard::set(temp.path()).unwrap();
+    std::fs::write(temp.path().join("fzfetch.toml"), "nucleo_threads = 0\n").unwrap();
+
+    let error = fzfetch::config::AppConfig::from_sources()
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("nucleo_threads"));
+    assert!(error.contains("greater than zero"));
 }
 
 #[test]
