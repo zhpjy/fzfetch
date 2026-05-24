@@ -41,9 +41,7 @@ pub fn load_cache_records(cache_file: &Path) -> anyhow::Result<FileSnapshot> {
     load_cache_records_from_reader(BufReader::new(file))
 }
 
-pub fn load_cache_records_from_reader<R: BufRead>(
-    reader: R,
-) -> anyhow::Result<FileSnapshot> {
+pub fn load_cache_records_from_reader<R: BufRead>(reader: R) -> anyhow::Result<FileSnapshot> {
     let mut records = HashMap::new();
     for line in reader.lines() {
         let line = line?;
@@ -58,10 +56,7 @@ pub fn load_cache_records_from_reader<R: BufRead>(
     Ok(records)
 }
 
-pub fn write_cache_snapshot(
-    cache_file: &Path,
-    records: &FileSnapshot,
-) -> anyhow::Result<()> {
+pub fn write_cache_snapshot(cache_file: &Path, records: &FileSnapshot) -> anyhow::Result<()> {
     let parent = cache_file
         .parent()
         .ok_or_else(|| anyhow::anyhow!("cache file has no parent: {}", cache_file.display()))?;
@@ -88,9 +83,7 @@ pub fn write_cache_snapshot(
     Ok(())
 }
 
-pub fn snapshot_records(
-    snapshot: &FileSnapshot,
-) -> impl Iterator<Item = FileRecord> + '_ {
+pub fn snapshot_records(snapshot: &FileSnapshot) -> impl Iterator<Item = FileRecord> + '_ {
     snapshot
         .iter()
         .map(|(path, size_bytes)| file_record_from_snapshot(path, *size_bytes))

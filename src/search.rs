@@ -39,12 +39,7 @@ impl SearchEngine {
     }
 
     pub fn with_threads(num_threads: Option<usize>) -> Self {
-        let nucleo = Nucleo::new(
-            Config::DEFAULT,
-            Arc::new(|| {}),
-            num_threads,
-            1,
-        );
+        let nucleo = Nucleo::new(Config::DEFAULT, Arc::new(|| {}), num_threads, 1);
         let matcher = Matcher::new(Config::DEFAULT);
         Self { nucleo, matcher }
     }
@@ -76,9 +71,7 @@ impl SearchEngine {
         let snapshot = self.nucleo.snapshot();
         let query = query.trim().to_lowercase();
         collect_top_hits(
-            snapshot
-            .matched_items(..)
-            .map(|item| {
+            snapshot.matched_items(..).map(|item| {
                 let score = snapshot
                     .pattern()
                     .score(item.matcher_columns, &mut self.matcher)
@@ -157,10 +150,7 @@ fn collect_top_hits(hits: impl IntoIterator<Item = RankedHit>, top_k: usize) -> 
             continue;
         }
 
-        let should_replace = heap
-            .peek()
-            .map(|worst| hit > worst.0)
-            .unwrap_or(true);
+        let should_replace = heap.peek().map(|worst| hit > worst.0).unwrap_or(true);
         if should_replace {
             heap.pop();
             heap.push(Reverse(hit));
@@ -189,7 +179,7 @@ mod tests {
     use crate::cache::FileRecord;
 
     use super::{
-        DEFAULT_NUCLEO_THREADS, SearchEngine, SearchHit, RankedHit, collect_top_hits,
+        DEFAULT_NUCLEO_THREADS, RankedHit, SearchEngine, SearchHit, collect_top_hits,
         default_nucleo_threads,
     };
 

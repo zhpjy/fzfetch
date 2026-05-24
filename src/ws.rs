@@ -228,9 +228,7 @@ mod tests {
 
     use crate::state::IndexStatus;
 
-    use super::{
-        assert_stale_epoch_is_dropped, broadcast_message, index_status_message,
-    };
+    use super::{assert_stale_epoch_is_dropped, broadcast_message, index_status_message};
 
     #[test]
     fn stale_epoch_is_dropped() {
@@ -249,7 +247,8 @@ mod tests {
 
     #[test]
     fn broadcast_message_preserves_index_status_payload() {
-        let message = broadcast_message("{\"type\":\"INDEX_STATUS\",\"state\":\"ready\"}".to_string());
+        let message =
+            broadcast_message("{\"type\":\"INDEX_STATUS\",\"state\":\"ready\"}".to_string());
 
         assert_eq!(
             message,

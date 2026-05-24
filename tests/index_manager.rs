@@ -5,8 +5,8 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use fzfetch::cache::{FileSnapshot, ensure_cache_layout, write_cache_snapshot};
 use fzfetch::config::AppConfig;
-use fzfetch::state::IndexStatus;
 use fzfetch::state::AppState;
+use fzfetch::state::IndexStatus;
 
 fn build_config(root_dir: &Path, data_dir: PathBuf, cache_file: PathBuf) -> AppConfig {
     let mut config = AppConfig::default_for(root_dir.to_path_buf());
@@ -222,7 +222,10 @@ async fn index_status_is_pending_before_bootstrap_refresh_runs() {
 
     let state = AppState::new(config);
 
-    assert_eq!(state.index_manager.current_status().await, IndexStatus::Pending);
+    assert_eq!(
+        state.index_manager.current_status().await,
+        IndexStatus::Pending
+    );
 }
 
 async fn recv_until_index_refreshed(

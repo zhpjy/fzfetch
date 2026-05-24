@@ -8,10 +8,7 @@ pub struct IndexDiff {
     pub removed: Vec<String>,
 }
 
-pub fn scan_root_files(
-    root_dir: &Path,
-    excluded_dirs: &[PathBuf],
-) -> anyhow::Result<FileSnapshot> {
+pub fn scan_root_files(root_dir: &Path, excluded_dirs: &[PathBuf]) -> anyhow::Result<FileSnapshot> {
     let mut files = HashMap::new();
     let mut walker = walkdir::WalkDir::new(root_dir).into_iter();
     while let Some(entry) = walker.next() {
@@ -43,10 +40,7 @@ pub fn scan_root_files(
     Ok(files)
 }
 
-pub fn diff_records(
-    old_records: &FileSnapshot,
-    new_records: &FileSnapshot,
-) -> IndexDiff {
+pub fn diff_records(old_records: &FileSnapshot, new_records: &FileSnapshot) -> IndexDiff {
     let mut added: Vec<FileRecord> = new_records
         .iter()
         .filter_map(|(path, size_bytes)| match old_records.get(path) {
