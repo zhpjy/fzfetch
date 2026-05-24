@@ -18,6 +18,11 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
   - 启动时确保 `data/cache.txt` 存在。
   - 注册 WebSocket 搜索接口与下载接口。
   - 启动空闲索引清理循环。
+- `src/web.rs`
+  - 构建 Axum Router。
+  - `/ws` 与 `/download` 保持显式路由。
+  - 其他请求由静态资源 fallback 处理，从编译期 `frontend/dist` 生成的 `rust_embed` 资源中读取文件。
+  - 找不到具体静态资源时回退到内嵌的 `index.html`，支持前端路由刷新。
 - `src/config.rs`
   - `AppConfig` 统一管理搜索目录、排除目录、`data/cache.txt`、TTL、清理周期、TopK。
   - 支持从 `fzfetch.toml` 或环境变量读取运行时配置。
@@ -49,7 +54,9 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 - `FZFETCH_CONFIG`
   - 可选 TOML 配置文件路径。
-  - 默认值：当前工作目录下的 `fzfetch.toml`。
+  - 默认值：未设置。
+  - 未设置时会尝试读取当前工作目录下的 `fzfetch.toml`，文件不存在则忽略；如果文件存在但内容无效，启动会失败。
+  - 设置后指定文件必须可读取且是合法 TOML，否则启动失败。
 - `FZFETCH_SEARCH_DIR`
   - 需要建立索引的搜索目录。
   - 默认值：当前工作目录下的 `files`。
@@ -80,6 +87,7 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 说明：
 
 - 配置优先级：默认值 < fzfetch.toml 或 FZFETCH_CONFIG 指定文件 < FZFETCH_* 环境变量。
+- `fzfetch.example.toml` 提供了一份可复制调整的样例配置。
 - `cache.txt` 路径固定为 `FZFETCH_DATA_DIR/cache.txt`，默认即 `data/cache.txt`。
 - 启动时若 `FZFETCH_SEARCH_DIR` 或 `FZFETCH_DATA_DIR` 不存在，进程会自动创建目录。
 - `FZFETCH_EXCLUDE_DIRS` 支持不存在的目录；如果后续该目录出现，扫描时仍会被跳过。

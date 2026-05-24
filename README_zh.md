@@ -76,7 +76,7 @@ npm --prefix frontend test
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `FZFETCH_CONFIG` | `fzfetch.toml` | 可选 TOML 配置文件路径 |
+| `FZFETCH_CONFIG` | 未设置 | 可选 TOML 配置文件路径 |
 | `FZFETCH_SEARCH_DIR` | `files` | 需要建立索引的搜索目录 |
 | `FZFETCH_DATA_DIR` | `data` | 应用状态目录，缓存文件位于该目录下 |
 | `FZFETCH_EXCLUDE_DIRS` | 空 | 逗号分隔的相对目录列表，这些目录及其子目录不会进入索引 |
@@ -88,7 +88,10 @@ npm --prefix frontend test
 
 补充说明：
 
-- `fzfetch.toml` 是可选配置文件，默认从当前工作目录读取，且 `FZFETCH_*` 环境变量会覆盖配置文件中的值
+- 可以从 `fzfetch.example.toml` 复制并调整出本地 `fzfetch.toml`
+- 未设置 `FZFETCH_CONFIG` 时，`fzfetch` 会尝试读取 `./fzfetch.toml`，文件不存在则忽略；如果文件存在但内容无效，启动会失败
+- 设置 `FZFETCH_CONFIG` 时，指定文件必须可读取且是合法 TOML，否则启动失败
+- `FZFETCH_*` 环境变量会覆盖配置文件中的值
 - `cache.txt` 固定为 `FZFETCH_DATA_DIR/cache.txt`
 - 本地默认是 `data/cache.txt`
 - 容器默认是 `/data/cache.txt`

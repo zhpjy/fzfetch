@@ -76,7 +76,7 @@ The backend listens on `0.0.0.0:3000` by default.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FZFETCH_CONFIG` | `fzfetch.toml` | Optional path to a TOML config file |
+| `FZFETCH_CONFIG` | unset | Optional path to a TOML config file |
 | `FZFETCH_SEARCH_DIR` | `files` | Search directory to index |
 | `FZFETCH_DATA_DIR` | `data` | Application state directory that stores the cache file |
 | `FZFETCH_EXCLUDE_DIRS` | empty | Comma-separated relative directory list to exclude from indexing |
@@ -88,7 +88,10 @@ The backend listens on `0.0.0.0:3000` by default.
 
 Notes:
 
-- `fzfetch.toml` is optional; by default it is loaded from the current working directory, and `FZFETCH_*` environment variables override values from the file
+- Use `fzfetch.example.toml` as a starting point for a local `fzfetch.toml`
+- When `FZFETCH_CONFIG` is unset, `fzfetch` optionally tries `./fzfetch.toml`, ignores it if absent, and fails startup if the file exists but is invalid
+- When `FZFETCH_CONFIG` is set, the specified file must be readable and valid TOML, or startup fails
+- `FZFETCH_*` environment variables override values from the config file
 - The cache file path is always `FZFETCH_DATA_DIR/cache.txt`
 - The local default is `data/cache.txt`
 - The container default is `/data/cache.txt`
