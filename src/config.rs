@@ -1,6 +1,21 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileConfig {
+    search_dir: Option<PathBuf>,
+    data_dir: Option<PathBuf>,
+    exclude_dirs: Option<Vec<PathBuf>>,
+    refresh_ttl_secs: Option<u64>,
+    idle_ttl_secs: Option<u64>,
+    cleanup_interval_secs: Option<u64>,
+    top_k: Option<usize>,
+    nucleo_threads: Option<usize>,
+}
+
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub root_dir: PathBuf,
@@ -38,20 +53,18 @@ impl AppConfig {
     }
 
     pub fn from_env() -> anyhow::Result<Self> {
-        let root_dir = std::env::var("FZFETCH_ROOT").unwrap_or_else(|_| "files".to_string());
-        let data_dir = std::env::var("FZFETCH_DATA_DIR").unwrap_or_else(|_| "data".to_string());
-        let mut config = Self::default_for(root_dir.into());
-        config.data_dir = PathBuf::from(data_dir);
-        config.cache_file = config.data_dir.join("cache.txt");
-        config.exclude_dirs = parse_path_list_env("FZFETCH_EXCLUDE_DIRS")?;
-        config.refresh_ttl =
-            Duration::from_secs(parse_u64_env("FZFETCH_REFRESH_TTL_SECS", 24 * 60 * 60)?);
-        config.idle_ttl = Duration::from_secs(parse_u64_env("FZFETCH_IDLE_TTL_SECS", 30 * 60)?);
-        config.cleanup_interval =
-            Duration::from_secs(parse_u64_env("FZFETCH_CLEANUP_INTERVAL_SECS", 60)?);
-        config.top_k = parse_usize_env("FZFETCH_TOP_K", 100)?;
-        config.nucleo_threads = parse_nonzero_usize_env("FZFETCH_NUCLEO_THREADS", 4)?;
-        config.refresh_canonical_exclude_dirs();
+        Self::from_sources()
+    }
+
+    pub fn from_sources() -> anyhow::Result<Self> {
+        reject_legacy_root_env()?;
+
+        let mut config = Self::default_for(PathBuf::from("files"));
+        if let Some(file_config) = load_file_config()? {
+            apply_file_config(&mut config, file_config)?;
+        }
+        apply_env_config(&mut config)?;
+        finalize_config(&mut config)?;
         Ok(config)
     }
 
@@ -74,21 +87,139 @@ impl AppConfig {
     }
 }
 
+fn reject_legacy_root_env() -> anyhow::Result<()> {
+    if std::env::var_os("FZFETCH_ROOT").is_some() {
+        anyhow::bail!("FZFETCH_ROOT is no longer supported; use FZFETCH_SEARCH_DIR instead");
+    }
+    Ok(())
+}
+
+fn load_file_config() -> anyhow::Result<Option<FileConfig>> {
+    if let Some(path) = std::env::var_os("FZFETCH_CONFIG").map(PathBuf::from) {
+        let contents = std::fs::read_to_string(&path).map_err(|error| {
+            anyhow::anyhow!(
+                "failed to read FZFETCH_CONFIG at {}: {error}",
+                path.display()
+            )
+        })?;
+        return parse_file_config(&path, &contents).map(Some);
+    }
+
+    let path = PathBuf::from("fzfetch.toml");
+    match std::fs::read_to_string(&path) {
+        Ok(contents) => parse_file_config(&path, &contents).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(anyhow::anyhow!(
+            "failed to read {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn parse_file_config(path: &std::path::Path, contents: &str) -> anyhow::Result<FileConfig> {
+    toml::from_str(contents)
+        .map_err(|error| anyhow::anyhow!("failed to parse {}: {error}", path.display()))
+}
+
+fn apply_file_config(config: &mut AppConfig, file: FileConfig) -> anyhow::Result<()> {
+    if let Some(search_dir) = file.search_dir {
+        config.root_dir = search_dir;
+    }
+    if let Some(data_dir) = file.data_dir {
+        config.data_dir = data_dir;
+    }
+    if let Some(exclude_dirs) = file.exclude_dirs {
+        config.exclude_dirs = exclude_dirs;
+    }
+    if let Some(refresh_ttl_secs) = file.refresh_ttl_secs {
+        config.refresh_ttl = Duration::from_secs(refresh_ttl_secs);
+    }
+    if let Some(idle_ttl_secs) = file.idle_ttl_secs {
+        config.idle_ttl = Duration::from_secs(idle_ttl_secs);
+    }
+    if let Some(cleanup_interval_secs) = file.cleanup_interval_secs {
+        config.cleanup_interval = Duration::from_secs(cleanup_interval_secs);
+    }
+    if let Some(top_k) = file.top_k {
+        config.top_k = top_k;
+    }
+    if let Some(nucleo_threads) = file.nucleo_threads {
+        if nucleo_threads == 0 {
+            anyhow::bail!("nucleo_threads must be greater than zero");
+        }
+        config.nucleo_threads = nucleo_threads;
+    }
+    Ok(())
+}
+
+fn apply_env_config(config: &mut AppConfig) -> anyhow::Result<()> {
+    if let Some(search_dir) = read_env_var("FZFETCH_SEARCH_DIR")? {
+        config.root_dir = PathBuf::from(search_dir);
+    }
+    if let Some(data_dir) = read_env_var("FZFETCH_DATA_DIR")? {
+        config.data_dir = PathBuf::from(data_dir);
+    }
+    if let Some(exclude_dirs) = parse_path_list_env("FZFETCH_EXCLUDE_DIRS")? {
+        config.exclude_dirs = exclude_dirs;
+    }
+    if let Some(value) = read_env_var("FZFETCH_REFRESH_TTL_SECS")? {
+        config.refresh_ttl = Duration::from_secs(parse_u64_value(
+            "FZFETCH_REFRESH_TTL_SECS",
+            Some(value),
+            config.refresh_ttl.as_secs(),
+        )?);
+    }
+    if let Some(value) = read_env_var("FZFETCH_IDLE_TTL_SECS")? {
+        config.idle_ttl = Duration::from_secs(parse_u64_value(
+            "FZFETCH_IDLE_TTL_SECS",
+            Some(value),
+            config.idle_ttl.as_secs(),
+        )?);
+    }
+    if let Some(value) = read_env_var("FZFETCH_CLEANUP_INTERVAL_SECS")? {
+        config.cleanup_interval = Duration::from_secs(parse_u64_value(
+            "FZFETCH_CLEANUP_INTERVAL_SECS",
+            Some(value),
+            config.cleanup_interval.as_secs(),
+        )?);
+    }
+    if let Some(value) = read_env_var("FZFETCH_TOP_K")? {
+        config.top_k = parse_usize_value("FZFETCH_TOP_K", Some(value), config.top_k)?;
+    }
+    if let Some(value) = read_env_var("FZFETCH_NUCLEO_THREADS")? {
+        let nucleo_threads =
+            parse_usize_value("FZFETCH_NUCLEO_THREADS", Some(value), config.nucleo_threads)?;
+        if nucleo_threads == 0 {
+            anyhow::bail!("FZFETCH_NUCLEO_THREADS must be greater than zero");
+        }
+        config.nucleo_threads = nucleo_threads;
+    }
+    Ok(())
+}
+
+fn finalize_config(config: &mut AppConfig) -> anyhow::Result<()> {
+    config.canonical_root_dir =
+        std::fs::canonicalize(&config.root_dir).unwrap_or_else(|_| config.root_dir.clone());
+    config.cache_file = config.data_dir.join("cache.txt");
+    config.refresh_canonical_exclude_dirs();
+    Ok(())
+}
+
+fn read_env_var(name: &str) -> anyhow::Result<Option<String>> {
+    match std::env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(error) => Err(anyhow::anyhow!("failed to read {name}: {error}")),
+    }
+}
+
 fn parse_u64_env(name: &str, default: u64) -> anyhow::Result<u64> {
-    let value = match std::env::var(name) {
-        Ok(value) => Some(value),
-        Err(std::env::VarError::NotPresent) => None,
-        Err(error) => return Err(anyhow::anyhow!("failed to read {name}: {error}")),
-    };
+    let value = read_env_var(name)?;
     parse_u64_value(name, value, default)
 }
 
 fn parse_usize_env(name: &str, default: usize) -> anyhow::Result<usize> {
-    let value = match std::env::var(name) {
-        Ok(value) => Some(value),
-        Err(std::env::VarError::NotPresent) => None,
-        Err(error) => return Err(anyhow::anyhow!("failed to read {name}: {error}")),
-    };
+    let value = read_env_var(name)?;
     parse_usize_value(name, value, default)
 }
 
@@ -100,19 +231,19 @@ fn parse_nonzero_usize_env(name: &str, default: usize) -> anyhow::Result<usize> 
     Ok(value)
 }
 
-fn parse_path_list_env(name: &str) -> anyhow::Result<Vec<PathBuf>> {
-    let value = match std::env::var(name) {
-        Ok(value) => value,
-        Err(std::env::VarError::NotPresent) => return Ok(Vec::new()),
-        Err(error) => return Err(anyhow::anyhow!("failed to read {name}: {error}")),
+fn parse_path_list_env(name: &str) -> anyhow::Result<Option<Vec<PathBuf>>> {
+    let Some(value) = read_env_var(name)? else {
+        return Ok(None);
     };
 
-    Ok(value
-        .split(',')
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-        .map(PathBuf::from)
-        .collect())
+    Ok(Some(
+        value
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(PathBuf::from)
+            .collect(),
+    ))
 }
 
 fn parse_u64_value(name: &str, value: Option<String>, default: u64) -> anyhow::Result<u64> {

@@ -19,10 +19,10 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(build_env_filter())
         .init();
 
-    let mut config = AppConfig::from_env()?;
+    let mut config = AppConfig::from_sources()?;
     config.ensure_runtime_dirs()?;
     tracing::info!(
-        root_dir = %config.canonical_root_dir.display(),
+        search_dir = %config.canonical_root_dir.display(),
         cache_file = %config.cache_file.display(),
         refresh_ttl_secs = config.refresh_ttl.as_secs(),
         idle_ttl_secs = config.idle_ttl.as_secs(),

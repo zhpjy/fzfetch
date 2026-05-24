@@ -118,10 +118,7 @@ fn config_uses_expected_defaults() {
 #[test]
 fn from_env_uses_local_default_directories() {
     let _guard = env_lock().lock().unwrap();
-    unsafe {
-        std::env::remove_var("FZFETCH_ROOT");
-        std::env::remove_var("FZFETCH_DATA_DIR");
-    }
+    let _env = EnvGuard::clear_config_vars();
 
     let config = fzfetch::config::AppConfig::from_env().unwrap();
 
@@ -131,14 +128,13 @@ fn from_env_uses_local_default_directories() {
 }
 
 #[test]
-fn from_env_honors_root_and_data_dir_overrides() {
+fn from_env_honors_search_and_data_dir_overrides() {
     let _guard = env_lock().lock().unwrap();
     let root = PathBuf::from("/tmp/fzfetch-root");
     let data_dir = PathBuf::from("/tmp/fzfetch-data");
-    unsafe {
-        std::env::set_var("FZFETCH_ROOT", &root);
-        std::env::set_var("FZFETCH_DATA_DIR", &data_dir);
-    }
+    let env = EnvGuard::clear_config_vars();
+    env.set("FZFETCH_SEARCH_DIR", &root);
+    env.set("FZFETCH_DATA_DIR", &data_dir);
 
     let config = fzfetch::config::AppConfig::from_env().unwrap();
 
@@ -148,21 +144,14 @@ fn from_env_honors_root_and_data_dir_overrides() {
         config.cache_file,
         PathBuf::from("/tmp/fzfetch-data/cache.txt")
     );
-
-    unsafe {
-        std::env::remove_var("FZFETCH_ROOT");
-        std::env::remove_var("FZFETCH_DATA_DIR");
-    }
 }
 
 #[test]
 fn from_env_parses_exclude_dirs_and_ignores_empty_items() {
     let _guard = env_lock().lock().unwrap();
-    unsafe {
-        std::env::set_var("FZFETCH_ROOT", "/tmp/fzfetch-root");
-        std::env::remove_var("FZFETCH_DATA_DIR");
-        std::env::set_var("FZFETCH_EXCLUDE_DIRS", "tmp, nested/cache , ,logs");
-    }
+    let env = EnvGuard::clear_config_vars();
+    env.set("FZFETCH_SEARCH_DIR", "/tmp/fzfetch-root");
+    env.set("FZFETCH_EXCLUDE_DIRS", "tmp, nested/cache , ,logs");
 
     let config = fzfetch::config::AppConfig::from_env().unwrap();
 
@@ -174,31 +163,17 @@ fn from_env_parses_exclude_dirs_and_ignores_empty_items() {
             PathBuf::from("logs"),
         ]
     );
-
-    unsafe {
-        std::env::remove_var("FZFETCH_ROOT");
-        std::env::remove_var("FZFETCH_DATA_DIR");
-        std::env::remove_var("FZFETCH_EXCLUDE_DIRS");
-    }
 }
 
 #[test]
 fn from_env_honors_nucleo_thread_override() {
     let _guard = env_lock().lock().unwrap();
-    unsafe {
-        std::env::remove_var("FZFETCH_ROOT");
-        std::env::remove_var("FZFETCH_DATA_DIR");
-        std::env::remove_var("FZFETCH_EXCLUDE_DIRS");
-        std::env::set_var("FZFETCH_NUCLEO_THREADS", "2");
-    }
+    let env = EnvGuard::clear_config_vars();
+    env.set("FZFETCH_NUCLEO_THREADS", "2");
 
     let config = fzfetch::config::AppConfig::from_env().unwrap();
 
     assert_eq!(config.nucleo_threads, 2);
-
-    unsafe {
-        std::env::remove_var("FZFETCH_NUCLEO_THREADS");
-    }
 }
 
 #[test]
@@ -543,7 +518,11 @@ fn scan_root_files_continues_when_walkdir_hits_unreadable_dir() {
 
     assert!(files.is_ok());
     let files = files.unwrap();
-    let valid_path = valid_file.canonicalize().unwrap().to_string_lossy().to_string();
+    let valid_path = valid_file
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
     assert!(files.contains_key(valid_path.as_str()));
 }
 
@@ -568,12 +547,16 @@ fn scan_root_files_skips_excluded_directories_and_descendants() {
 
     let keep_path = keep.canonicalize().unwrap().to_string_lossy().to_string();
     assert!(files.contains_key(keep_path.as_str()));
-    let sibling_path = sibling_file.canonicalize().unwrap().to_string_lossy().to_string();
-    assert!(files.contains_key(
-        sibling_path.as_str()
-    ));
-    let excluded_path = excluded_file.canonicalize().unwrap().to_string_lossy().to_string();
-    assert!(!files.contains_key(
-        excluded_path.as_str()
-    ));
+    let sibling_path = sibling_file
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    assert!(files.contains_key(sibling_path.as_str()));
+    let excluded_path = excluded_file
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    assert!(!files.contains_key(excluded_path.as_str()));
 }
