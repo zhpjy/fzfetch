@@ -1,0 +1,23 @@
+# Directory scanned by fzfetch.
+search_dir = "files"
+
+# Application state directory. The cache file is always data_dir/cache.txt.
+data_dir = "data"
+
+# Directories excluded from indexing, relative to search_dir.
+exclude_dirs = ["tmp", "cache/private"]
+
+# Cache expiration in seconds.
+refresh_ttl_secs = 86400
+
+# Idle lifetime before the in-memory index is unloaded.
+idle_ttl_secs = 1800
+
+# Cleanup loop interval in seconds.
+cleanup_interval_secs = 60
+
+# Maximum number of search results.
+top_k = 100
+
+# Number of nucleo matcher threads. Must be greater than zero.
+nucleo_threads = 4

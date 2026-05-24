@@ -16,7 +16,7 @@
 
 ```bash
 docker run --rm -p 3000:3000 \
-  -e FZFETCH_ROOT=/files \
+  -e FZFETCH_SEARCH_DIR=/files \
   -e FZFETCH_DATA_DIR=/data \
   -v "$(pwd)/files:/files" \
   -v fzfetch-data:/data \
@@ -52,6 +52,8 @@ npm --prefix frontend run dev
 
 这些目录如果不存在，`fzfetch` 会自动创建。
 
+发布版二进制会直接提供内嵌前端资源，不需要额外准备 `frontend/dist` 目录。
+
 ## 本地开发
 
 常用命令如下：
@@ -74,7 +76,8 @@ npm --prefix frontend test
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `FZFETCH_ROOT` | `files` | 需要建立索引的根目录 |
+| `FZFETCH_CONFIG` | `fzfetch.toml` | 可选 TOML 配置文件路径 |
+| `FZFETCH_SEARCH_DIR` | `files` | 需要建立索引的搜索目录 |
 | `FZFETCH_DATA_DIR` | `data` | 应用状态目录，缓存文件位于该目录下 |
 | `FZFETCH_EXCLUDE_DIRS` | 空 | 逗号分隔的相对目录列表，这些目录及其子目录不会进入索引 |
 | `FZFETCH_REFRESH_TTL_SECS` | `86400` | 缓存过期秒数，过期后下一次搜索会触发后台刷新 |
@@ -85,10 +88,11 @@ npm --prefix frontend test
 
 补充说明：
 
+- `fzfetch.toml` 是可选配置文件，默认从当前工作目录读取，且 `FZFETCH_*` 环境变量会覆盖配置文件中的值
 - `cache.txt` 固定为 `FZFETCH_DATA_DIR/cache.txt`
 - 本地默认是 `data/cache.txt`
 - 容器默认是 `/data/cache.txt`
-- `FZFETCH_EXCLUDE_DIRS` 中的每一项都相对 `FZFETCH_ROOT` 解析，例如 `tmp,cache/private`
+- `FZFETCH_EXCLUDE_DIRS` 中的每一项都相对 `FZFETCH_SEARCH_DIR` 解析，例如 `tmp,cache/private`
 - 被排除目录下的所有子目录和文件都会被一起跳过
 
 ## 更多信息

@@ -19,13 +19,13 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
   - 注册 WebSocket 搜索接口与下载接口。
   - 启动空闲索引清理循环。
 - `src/config.rs`
-  - `AppConfig` 统一管理根目录、排除目录、`data/cache.txt`、TTL、清理周期、TopK。
-  - 支持从环境变量读取刷新 TTL、空闲 TTL、清理周期与 TopK。
+  - `AppConfig` 统一管理搜索目录、排除目录、`data/cache.txt`、TTL、清理周期、TopK。
+  - 支持从 `fzfetch.toml` 或环境变量读取运行时配置。
 - `src/cache.rs`
   - 负责 `data/` 与 `cache.txt` 的创建。
   - 负责缓存记录读写与原子替换。
 - `src/scanner.rs`
-  - 全盘扫描根目录，只收集常规文件。
+  - 全盘扫描搜索目录，只收集常规文件。
   - 支持剪枝跳过被排除目录及其整个子树。
   - 同时采集路径对应的 `size_bytes`。
   - 使用记录级差异比对驱动索引更新。
@@ -45,17 +45,20 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 ## 3. 运行时配置
 
-当前支持以下环境变量：
+当前支持 `fzfetch.toml`、`FZFETCH_CONFIG` 指定的配置文件，以及以下环境变量：
 
-- `FZFETCH_ROOT`
-  - 需要建立索引的根目录。
+- `FZFETCH_CONFIG`
+  - 可选 TOML 配置文件路径。
+  - 默认值：当前工作目录下的 `fzfetch.toml`。
+- `FZFETCH_SEARCH_DIR`
+  - 需要建立索引的搜索目录。
   - 默认值：当前工作目录下的 `files`。
 - `FZFETCH_DATA_DIR`
   - 应用状态目录，当前用于放置缓存文件。
   - 默认值：当前工作目录下的 `data`。
 - `FZFETCH_EXCLUDE_DIRS`
   - 用逗号分隔的相对目录列表。
-  - 每一项都相对 `FZFETCH_ROOT` 解析。
+  - 每一项都相对 `FZFETCH_SEARCH_DIR` 解析。
   - 命中的目录及其所有子目录中的文件都不会进入索引。
   - 默认值：空。
 - `FZFETCH_REFRESH_TTL_SECS`
@@ -76,8 +79,9 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 说明：
 
+- 配置优先级：默认值 < fzfetch.toml 或 FZFETCH_CONFIG 指定文件 < FZFETCH_* 环境变量。
 - `cache.txt` 路径固定为 `FZFETCH_DATA_DIR/cache.txt`，默认即 `data/cache.txt`。
-- 启动时若 `FZFETCH_ROOT` 或 `FZFETCH_DATA_DIR` 不存在，进程会自动创建目录。
+- 启动时若 `FZFETCH_SEARCH_DIR` 或 `FZFETCH_DATA_DIR` 不存在，进程会自动创建目录。
 - `FZFETCH_EXCLUDE_DIRS` 支持不存在的目录；如果后续该目录出现，扫描时仍会被跳过。
 - 若服务启动时发现 `cache.txt` 是新创建的空文件，则首次用户搜索会立即触发一次后台刷新，不会等到 24 小时后。
 
@@ -98,7 +102,7 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 ### 4.3 后台刷新
 
-1. `scan_root_files()` 遍历根目录收集所有文件绝对路径，并采集 `size_bytes`。
+1. `scan_root_files()` 遍历搜索目录收集所有文件绝对路径，并采集 `size_bytes`。
    对于配置在 `FZFETCH_EXCLUDE_DIRS` 中的目录，会直接跳过整棵子树。
 2. `diff_records()` 计算新增、删除与元信息变化。
 3. 将新快照覆盖写回 `data/cache.txt`。
@@ -179,7 +183,7 @@ GET /download?path=/abs/path/to/file.pdf
 处理顺序：
 
 1. 要求 `path` 必须是绝对路径，否则返回 `400`。
-2. 对可解析的现存祖先路径做 `canonicalize`，判断是否仍在允许的根目录内，越界则返回 `403`。
+2. 对可解析的现存祖先路径做 `canonicalize`，判断是否仍在允许的搜索目录内，越界则返回 `403`。
 3. 若物理文件已不存在，则返回 `410 Gone`，这就是惰性校验策略的落点。
 4. 若存在但不是常规文件，则返回 `404`。
 5. 合法文件以流式方式返回，避免整文件读入内存。

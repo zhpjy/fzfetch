@@ -9,6 +9,7 @@ Thumbs.db
 .env.*
 !.env.example
 !.env*.example
+fzfetch.toml
 
 # Rust build artifacts
 /target/

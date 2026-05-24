@@ -16,7 +16,7 @@ When you need to find a file, you usually do not want to wait, stand up extra se
 
 ```bash
 docker run --rm -p 3000:3000 \
-  -e FZFETCH_ROOT=/files \
+  -e FZFETCH_SEARCH_DIR=/files \
   -e FZFETCH_DATA_DIR=/data \
   -v "$(pwd)/files:/files" \
   -v fzfetch-data:/data \
@@ -46,11 +46,13 @@ npm --prefix frontend run dev
 
 By default, `fzfetch` uses:
 
-- `./files` as the indexed root directory
+- `./files` as the search directory
 - `./data` as the application data directory
 - `./data/cache.txt` as the cache file
 
 If these directories do not exist, `fzfetch` creates them automatically.
+
+Release binaries serve the embedded frontend and do not require a separate `frontend/dist` directory.
 
 ## Local Development
 
@@ -74,7 +76,8 @@ The backend listens on `0.0.0.0:3000` by default.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FZFETCH_ROOT` | `files` | Root directory to index |
+| `FZFETCH_CONFIG` | `fzfetch.toml` | Optional path to a TOML config file |
+| `FZFETCH_SEARCH_DIR` | `files` | Search directory to index |
 | `FZFETCH_DATA_DIR` | `data` | Application state directory that stores the cache file |
 | `FZFETCH_EXCLUDE_DIRS` | empty | Comma-separated relative directory list to exclude from indexing |
 | `FZFETCH_REFRESH_TTL_SECS` | `86400` | Cache expiration in seconds; the next search after expiry triggers a background refresh |
@@ -85,10 +88,11 @@ The backend listens on `0.0.0.0:3000` by default.
 
 Notes:
 
+- `fzfetch.toml` is optional; by default it is loaded from the current working directory, and `FZFETCH_*` environment variables override values from the file
 - The cache file path is always `FZFETCH_DATA_DIR/cache.txt`
 - The local default is `data/cache.txt`
 - The container default is `/data/cache.txt`
-- Every entry in `FZFETCH_EXCLUDE_DIRS` is resolved relative to `FZFETCH_ROOT`, for example `tmp,cache/private`
+- Every entry in `FZFETCH_EXCLUDE_DIRS` is resolved relative to `FZFETCH_SEARCH_DIR`, for example `tmp,cache/private`
 - Excluded directories and all of their descendants are skipped during indexing
 
 ## More Information
