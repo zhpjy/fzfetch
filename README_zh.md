@@ -49,7 +49,7 @@ npm --prefix frontend run dev
 默认会使用：
 
 - `./files` 作为搜索目录
-- `./data` 作为缓存目录
+- `./data` 作为应用状态目录
 - `./data/cache.txt` 作为缓存文件
 
 这些目录如果不存在，`fzfetch` 会自动创建。
@@ -62,6 +62,7 @@ npm --prefix frontend run dev
 
 ```bash
 # 后端
+npm --prefix frontend run build  # frontend/dist 不存在时，cargo run 前需要先执行
 cargo run
 cargo test
 

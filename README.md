@@ -62,6 +62,7 @@ Common commands:
 
 ```bash
 # Backend
+npm --prefix frontend run build  # required before cargo run when frontend/dist is missing
 cargo run
 cargo test
 
