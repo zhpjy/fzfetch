@@ -31,13 +31,15 @@ docker compose up -d
 
 ### Run Locally
 
-Start the backend first:
+Build the embedded frontend assets before compiling the backend:
 
 ```bash
+npm --prefix frontend install
+npm --prefix frontend run build
 cargo run
 ```
 
-Then start the frontend development server:
+For frontend development, you can also run the Vite dev server after installing dependencies:
 
 ```bash
 npm --prefix frontend install

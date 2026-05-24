@@ -4,8 +4,8 @@
 
 Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集与渲染。当前实现严格遵循以下原则：
 
-- 首次真正有用户请求时才将 `data/cache.txt` 载入内存。
-- `cache.txt` 不存在时，进程启动阶段自动创建 `data/` 与空的 `data/cache.txt`，便于 Docker 持久化挂载。
+- 首次真正有用户请求时才将 `FZFETCH_DATA_DIR/cache.txt` 载入内存。
+- `cache.txt` 不存在时，进程启动阶段自动创建应用状态目录与空的 `FZFETCH_DATA_DIR/cache.txt`，便于 Docker 持久化挂载。
 - 内存索引超过 `refresh_ttl` 未刷新时，在用户搜索触发时后台异步刷新。
 - 内存索引超过 `idle_ttl` 未被使用时，后台清理任务会将索引从内存移除。
 - WebSocket 搜索采用“前端微防抖 + 后端 req_id 纪元拦截”模型，过期结果直接丢弃。
@@ -15,7 +15,7 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 
 - `src/main.rs`
   - 读取运行时配置。
-  - 启动时确保 `data/cache.txt` 存在。
+  - 启动时确保 `FZFETCH_DATA_DIR/cache.txt` 存在。
   - 注册 WebSocket 搜索接口与下载接口。
   - 启动空闲索引清理循环。
 - `src/web.rs`
@@ -24,10 +24,10 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
   - 其他请求由静态资源 fallback 处理，从编译期 `frontend/dist` 生成的 `rust_embed` 资源中读取文件。
   - 找不到具体静态资源时回退到内嵌的 `index.html`，支持前端路由刷新。
 - `src/config.rs`
-  - `AppConfig` 统一管理搜索目录、排除目录、`data/cache.txt`、TTL、清理周期、TopK。
+  - `AppConfig` 统一管理搜索目录、排除目录、`FZFETCH_DATA_DIR/cache.txt`、TTL、清理周期、TopK。
   - 支持从 `fzfetch.toml` 或环境变量读取运行时配置。
 - `src/cache.rs`
-  - 负责 `data/` 与 `cache.txt` 的创建。
+  - 负责应用状态目录与 `cache.txt` 的创建。
   - 负责缓存记录读写与原子替换。
 - `src/scanner.rs`
   - 全盘扫描搜索目录，只收集常规文件。
@@ -98,13 +98,13 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 ### 4.1 启动阶段
 
 1. `main` 调用 `ensure_cache_layout`。
-2. 若 `data/cache.txt` 不存在，则创建空文件，并记录“需要首次刷新”标记。
+2. 若 `FZFETCH_DATA_DIR/cache.txt` 不存在，则创建空文件，并记录“需要首次刷新”标记。
 3. Web 服务立即启动，不阻塞于全盘扫描。
 
 ### 4.2 首次使用
 
 1. 用户第一次发起搜索。
-2. `IndexManager::ensure_loaded()` 读取 `data/cache.txt`。
+2. `IndexManager::ensure_loaded()` 读取 `FZFETCH_DATA_DIR/cache.txt`。
 3. 所有缓存记录注入 `nucleo` 内存索引。
 4. 若缓存是启动时新建的空缓存，或者缓存 mtime 已超过 `refresh_ttl`，则异步触发后台刷新。
 
@@ -113,7 +113,7 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 1. `scan_root_files()` 遍历搜索目录收集所有文件绝对路径，并采集 `size_bytes`。
    对于配置在 `FZFETCH_EXCLUDE_DIRS` 中的目录，会直接跳过整棵子树。
 2. `diff_records()` 计算新增、删除与元信息变化。
-3. 将新快照覆盖写回 `data/cache.txt`。
+3. 将新快照覆盖写回 `FZFETCH_DATA_DIR/cache.txt`。
 4. 更新内存索引：
    - 后台刷新阶段临时读取 `cache.txt` 旧快照，和新扫描结果做记录级差异比较。
    - 若只有新增，则走 injector 增量注入。
@@ -130,7 +130,7 @@ Fzfetch 后端负责所有重计算和索引驻留，前端只负责事件采集
 后台任务每隔 `cleanup_interval` 检查一次内存索引：
 
 - 若距离最近一次使用超过 `idle_ttl`，且当前没有刷新任务正在执行，则将索引整体释放。
-- 下一次真正有搜索请求时再从 `data/cache.txt` 重新载入。
+- 下一次真正有搜索请求时再从 `FZFETCH_DATA_DIR/cache.txt` 重新载入。
 
 ### 4.5 cache.txt 记录格式
 

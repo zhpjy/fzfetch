@@ -31,13 +31,15 @@ docker compose up -d
 
 ### 本地启动
 
-先启动后端：
+先构建会被后端内嵌的前端资源，再编译并启动后端：
 
 ```bash
+npm --prefix frontend install
+npm --prefix frontend run build
 cargo run
 ```
 
-再启动前端开发服务器：
+如果要开发前端，可以在安装依赖后另外启动 Vite 开发服务器：
 
 ```bash
 npm --prefix frontend install
