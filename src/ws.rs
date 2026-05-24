@@ -52,10 +52,6 @@ pub fn should_drop_response(latest_req_id: &AtomicU64, req_id: u64) -> bool {
     latest_req_id.load(Ordering::Acquire) != req_id
 }
 
-fn broadcast_message(payload: String) -> Message {
-    Message::Text(payload.into())
-}
-
 fn index_status_message(status: IndexStatus) -> Message {
     let state = match status {
         IndexStatus::Pending => "pending",
