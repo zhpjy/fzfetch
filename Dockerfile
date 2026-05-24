@@ -27,7 +27,7 @@ COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 RUN mkdir -p /files /data
 
-ENV FZFETCH_ROOT=/files
+ENV FZFETCH_SEARCH_DIR=/files
 ENV FZFETCH_DATA_DIR=/data
 
 EXPOSE 3000
