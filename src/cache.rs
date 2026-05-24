@@ -125,7 +125,7 @@ fn parse_cache_line(line: &str) -> anyhow::Result<(Box<str>, Option<u64>)> {
 
 fn write_snapshot_lines<W: Write>(writer: &mut W, records: &FileSnapshot) -> anyhow::Result<()> {
     let mut sorted: Vec<(&Box<str>, &Option<u64>)> = records.iter().collect();
-    sorted.sort_by(|left, right| left.0.cmp(right.0));
+    sorted.sort_unstable_by(|left, right| left.0.cmp(right.0));
 
     for (path, size_bytes) in sorted {
         match size_bytes {

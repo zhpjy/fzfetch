@@ -318,6 +318,14 @@ impl IndexManager {
             }
         });
     }
+
+    async fn runtime_is_unloadable(&self, runtime: &Arc<IndexRuntime>) -> bool {
+        let last_used_at = *runtime.last_used_at.lock().await;
+        if last_used_at.elapsed() <= self.config.idle_ttl {
+            return false;
+        }
+        !runtime.refreshing.load(Ordering::Acquire)
+    }
 }
 
 fn index_status_event(status: IndexStatus) -> String {
@@ -327,17 +335,6 @@ fn index_status_event(status: IndexStatus) -> String {
         IndexStatus::Ready => "ready",
     };
     format!("{{\"type\":\"INDEX_STATUS\",\"state\":\"{state}\"}}")
-}
-
-impl IndexManager {
-    async fn runtime_is_unloadable(&self, runtime: &Arc<IndexRuntime>) -> bool {
-        let last_used_at = *runtime.last_used_at.lock().await;
-        if last_used_at.elapsed() <= self.config.idle_ttl {
-            return false;
-        }
-
-        !runtime.refreshing.load(Ordering::Acquire)
-    }
 }
 
 struct BlockingRefreshOutput {

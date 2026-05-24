@@ -62,7 +62,7 @@ pub fn diff_records(
         })
         .map(String::from)
         .collect();
-    added.sort_by(|left, right| left.path.cmp(&right.path));
-    removed.sort();
+    added.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+    removed.sort_unstable();
     IndexDiff { added, removed }
 }

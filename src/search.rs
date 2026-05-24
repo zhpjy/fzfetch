@@ -168,7 +168,7 @@ fn collect_top_hits(hits: impl IntoIterator<Item = RankedHit>, top_k: usize) -> 
     }
 
     let mut ranked_hits = heap.into_iter().map(|Reverse(hit)| hit).collect::<Vec<_>>();
-    ranked_hits.sort_by(|left, right| right.cmp(left));
+    ranked_hits.sort_unstable_by(|left, right| right.cmp(left));
     ranked_hits.into_iter().map(|ranked| ranked.hit).collect()
 }
 
